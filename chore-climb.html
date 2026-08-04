@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Chore Climb</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E8F2EC;
+    --grid:#C9DED3;
+    --ink:#1B2A3A;
+    --pink:#FF4D8D;
+    --marigold:#FFC24B;
+    --cold:#2BB3A3;
+    --card:#FFFDF6;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--paper);}
+  body{
+    font-family:"Space Mono",ui-monospace,monospace;
+    color:var(--ink);
+    touch-action:none;
+    user-select:none;
+    overscroll-behavior:none;
+  }
+  #game{display:block;width:100%;height:100%;}
+
+  /* ---- HUD ---- */
+  #hud{
+    position:fixed;top:0;left:0;right:0;
+    padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 10px;
+    display:flex;justify-content:space-between;align-items:flex-start;
+    pointer-events:none;font-size:13px;letter-spacing:.06em;
+  }
+  .alt{font-family:"Fraunces",Georgia,serif;font-weight:900;font-size:36px;line-height:.9;}
+  .alt span{font-family:"Space Mono";font-size:13px;font-weight:400;opacity:.6;}
+  .lbl{opacity:.6;text-transform:uppercase;font-size:11px;letter-spacing:.13em;margin-bottom:3px;}
+  #anc{display:flex;gap:6px;justify-content:flex-end;margin-top:5px;}
+  .pip{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--ink);background:var(--ink);}
+  .pip.out{background:transparent;opacity:.3;}
+  #tiltrow{display:flex;gap:6px;justify-content:flex-end;margin-top:9px;}
+  #mute,#retilt{
+    pointer-events:auto;border:1.5px solid var(--ink);background:transparent;
+    color:var(--ink);font-family:"Space Mono";font-size:11px;letter-spacing:.08em;
+    padding:4px 8px;border-radius:20px;cursor:pointer;
+  }
+  #tiltstat{
+    margin-top:6px;font-size:11px;opacity:.65;text-align:right;
+    max-width:150px;line-height:1.4;
+  }
+  #tiltstat b{opacity:1;color:var(--pink);}
+
+  /* ---- toast: the chore you just did ---- */
+  #toast{
+    position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 74px);
+    transform:translate(-50%,-6px);
+    background:var(--card);border:1.5px solid var(--ink);
+    box-shadow:3px 3px 0 var(--ink);
+    padding:8px 16px;border-radius:3px;
+    font-size:15px;max-width:80vw;text-align:center;
+    opacity:0;transition:opacity .18s,transform .18s;pointer-events:none;
+  }
+  #toast.on{opacity:1;transform:translate(-50%,0);}
+
+  /* ---- chapter banner ---- */
+  #banner{
+    position:fixed;left:0;right:0;top:38%;text-align:center;pointer-events:none;
+    opacity:0;transition:opacity .5s;
+  }
+  #banner.on{opacity:1;}
+  #banner .k{font-size:11px;letter-spacing:.3em;text-transform:uppercase;opacity:.6;}
+  #banner .t{font-family:"Fraunces",Georgia,serif;font-weight:900;font-size:40px;margin-top:5px;}
+
+  /* ---- overlays ---- */
+  .sheet{
+    position:fixed;inset:0;display:flex;flex-direction:column;
+    justify-content:center;align-items:center;padding:26px;
+    background:rgba(232,242,236,.94);backdrop-filter:blur(3px);z-index:10;
+  }
+  .sheet.hide{display:none;}
+  .card{
+    background:var(--card);border:2px solid var(--ink);box-shadow:7px 7px 0 var(--ink);
+    padding:24px 22px;max-width:360px;width:100%;border-radius:4px;
+  }
+  h1{
+    font-family:"Fraunces",Georgia,serif;font-weight:900;font-size:46px;
+    line-height:.92;margin:0 0 2px;letter-spacing:-.02em;
+  }
+  h1 em{font-style:normal;color:var(--pink);}
+  .sub{font-size:14px;line-height:1.65;opacity:.78;margin:10px 0 18px;}
+  .rule{height:2px;background:var(--ink);opacity:.12;margin:16px 0;}
+  .row{display:flex;gap:8px;}
+  button.big{
+    width:100%;padding:15px;border:2px solid var(--ink);background:var(--marigold);
+    font-family:"Fraunces",serif;font-weight:900;font-size:20px;color:var(--ink);
+    border-radius:3px;cursor:pointer;box-shadow:3px 3px 0 var(--ink);
+  }
+  button.big:active{transform:translate(3px,3px);box-shadow:none;}
+  button.ghost{
+    flex:1;padding:10px 6px;border:1.5px solid var(--ink);background:transparent;
+    font-family:"Space Mono";font-size:12px;color:var(--ink);border-radius:3px;cursor:pointer;
+  }
+  button.ghost.sel{background:var(--ink);color:var(--card);}
+  .keys{font-size:11px;letter-spacing:.13em;text-transform:uppercase;opacity:.55;margin-bottom:7px;}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0 4px;}
+  .stat .n{font-family:"Fraunces",serif;font-weight:900;font-size:31px;line-height:1;}
+  .stat .l{font-size:11px;letter-spacing:.11em;text-transform:uppercase;opacity:.58;margin-top:3px;}
+  .legend{font-size:12.5px;line-height:1.95;opacity:.82;}
+  .legend b{color:var(--pink);}
+  :focus-visible{outline:3px solid var(--pink);outline-offset:2px;}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div>
+    <div class="lbl">Altitude</div>
+    <div class="alt" id="altv">0<span> m</span></div>
+  </div>
+  <div style="text-align:right">
+    <div class="lbl">Neutrophils</div>
+    <div id="anc"></div>
+    <div id="tiltrow">
+      <button id="mute">SOUND ON</button>
+      <button id="retilt">ENABLE TILT</button>
+    </div>
+    <div id="tiltstat">checking sensor…</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="banner"><div class="k" id="bk"></div><div class="t" id="bt"></div></div>
+
+<div class="sheet" id="start">
+  <div class="card">
+    <h1>Chore<br><em>Climb</em></h1>
+    <div class="sub">
+      Drag left and right anywhere on screen to steer — hold your finger down and slide
+      it the way you want to go. You bounce automatically — land on the to‑do cards to
+      stamp them done and keep climbing. A quick tap with no drag fires toward that spot.
+      Pink things want your attention. They cannot have it.
+    </div>
+    <div class="keys">Pick your head</div>
+    <div class="row" style="margin-bottom:14px">
+      <button class="ghost sel" data-head="buckethat">Bucket hat</button>
+      <button class="ghost" data-head="bangs">Bangs</button>
+      <button class="ghost" data-head="bare">Bare &amp; glorious</button>
+    </div>
+    <button class="big" id="go">Start climbing</button>
+    <div class="rule"></div>
+    <div class="legend">
+      <b>◉</b> cancer cell — stomp it from above, shoot it, or lose a neutrophil<br>
+      👆 tap anywhere — fire toward that spot, pops one cell<br>
+      ☕ espresso — one enormous launch<br>
+      🧤 cold gloves — 8 seconds of nothing touching you<br>
+      💧 infusion — clears the screen<br>
+    </div>
+    <div class="sub" style="margin:12px 0 0;font-size:12px">
+      Arrow keys steer too, if you're on a keyboard. If your device happens to support
+      tilt, tipping the phone left and right works as well — the reading in the top
+      corner will show a live angle when it's active. Either way, dragging always steers.
+    </div>
+  </div>
+</div>
+
+<div class="sheet hide" id="over">
+  <div class="card">
+    <h1 id="overtitle">Nadir.</h1>
+    <div class="sub" id="overline"></div>
+    <div class="stats">
+      <div class="stat"><div class="n" id="s1">0</div><div class="l">Meters climbed</div></div>
+      <div class="stat"><div class="n" id="s2">0</div><div class="l">Chores stamped</div></div>
+      <div class="stat"><div class="n" id="s3">0</div><div class="l">Cells stomped</div></div>
+      <div class="stat"><div class="n" id="s4">0</div><div class="l">Personal best</div></div>
+    </div>
+    <div class="rule"></div>
+    <button class="big" id="again">Go again</button>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ============================ setup ============================ */
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+resize();
+addEventListener('resize', resize);
+addEventListener('orientationchange', () => setTimeout(resize, 250));
+
+/* ============================ content ============================ */
+const TIERS = [
+  { at:0,    key:'Chapter one', name:'Tuesday', chores:[
+    'Answer three emails','Water the office plant','Refill the coffee','Sign a reimbursement',
+    'Reply-all. Regret it.','Show up to lab meeting','Find your badge','Grade one problem set',
+    'Book a room with a window','Close 41 browser tabs' ]},
+  { at:120,  key:'Chapter two', name:'The Real Job', chores:[
+    'Review a manuscript','Write a rec letter','Fix the IRB amendment','Debug the trigger codes',
+    'Reschedule four one-on-ones','Find the missing consent form','Say no to a committee',
+    'Re-run the analysis. Again.','Explain your own method to yourself','Read the reviewer 2 email' ]},
+  { at:320,  key:'Chapter three', name:'Dean Hours', chores:[
+    'Chair a meeting about meetings','Approve a budget you cannot see','Merge two strategic plans',
+    'Mediate an authorship dispute','Restructure the org chart','Restructure it back',
+    'Attend a retreat about synergy','Draft a memo about the memo','Sit on one more search committee' ]},
+  { at:700,  key:'Chapter four', name:'Escalation', chores:[
+    'Teach seminar from the infusion chair','Peer review your own peer review',
+    'Explain p-values to a provost','Sight-read a grant in 5/4','Present findings to a room of owls',
+    'Write an R01 in banjo tablature','Give a keynote inside an MRI','Advise a student who is also a wig' ]},
+  { at:1300, key:'Chapter five', name:'Fully Unhinged', chores:[
+    'Accept a degree from a sea otter','Conduct the symphony with a pipette',
+    'Referee two arguing scanners','Publish in Nature: Chores','Tenure the building',
+    'Deliver the address in low orbit','Chair the search for your own clone','Out-cite the sun' ]},
+  { at:2200, key:'Chapter six', name:'Legend', chores:[
+    'Be named honorary weather','The mandolin plays you now','Grant reviews itself out of respect',
+    'Cancer sends a formal apology','Time takes a sabbatical','Your inbox reaches zero. Briefly.',
+    'The owls hug you back','Somebody else water the plant' ]}
+];
+const OVERLINES = [
+  'Rest counts as progress. Bounce again.',
+  'The to-do list is infinite. You are not obligated to finish it today.',
+  'Every card you stamped stayed stamped.',
+  'Fatigue is a physics problem, not a character flaw.',
+  'You got that high on a Tuesday.'
+];
+
+/* ============================ state ============================ */
+const G = {
+  running:false, t:0,
+  cam:0, startY:0, alt:0, best:0,
+  chores:0, kills:0, anc:3, inv:0, shield:0,
+  head:'buckethat', tier:0, note:0,
+  plats:[], cells:[], ups:[], fx:[], bullets:[],
+  topY:0, shake:0
+};
+const P = { x:0, y:0, vx:0, vy:0, r:15, face:1 };
+
+/* ---- input ---- */
+let tiltRaw = 0, tiltBase = null, tilt = 0, keyDir = 0, dragX = null, dragTilt = 0;
+let tiltEventSeen = false, tiltLastSeen = 0, tiltPermState = 'unknown';
+function onOrient(e){
+  const g = (typeof e.gamma === 'number') ? e.gamma : null;
+  if (g === null) return;               // some devices fire empty events first
+  tiltEventSeen = true; tiltLastSeen = performance.now();
+  if (tiltBase === null) tiltBase = g;
+  tiltRaw = g - tiltBase;
+}
+async function enableTilt(){
+  const D = window.DeviceOrientationEvent;
+  if (!D){ tiltPermState = 'unsupported'; return tiltPermState; }
+  try{
+    if (typeof D.requestPermission === 'function'){
+      const r = await D.requestPermission();          // must run on the tap, no prior await
+      tiltPermState = r;                                // 'granted' | 'denied'
+      if (r === 'granted') addEventListener('deviceorientation', onOrient);
+    } else {
+      addEventListener('deviceorientation', onOrient);  // Android / older Safari: no prompt needed
+      tiltPermState = 'granted';
+    }
+  }catch(err){
+    tiltPermState = 'error';
+  }
+  return tiltPermState;
+}
+addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft')  keyDir = -1;
+  if (e.key === 'ArrowRight') keyDir =  1;
+  if (e.code === 'Space'){ e.preventDefault(); shoot(); }
+});
+addEventListener('keyup', e => {
+  if (e.key === 'ArrowLeft' && keyDir === -1) keyDir = 0;
+  if (e.key === 'ArrowRight' && keyDir === 1) keyDir = 0;
+});
+cv.addEventListener('pointerdown', e => {
+  dragX = e.clientX;
+  tapX = e.clientX; tapY = e.clientY; tapT = performance.now(); tapMoved = false;
+});
+cv.addEventListener('pointermove', e => {
+  if (dragX === null) return;
+  dragTilt = Math.max(-1, Math.min(1, (e.clientX - dragX) / 70));
+  if (Math.abs(e.clientX - tapX) > 10 || Math.abs(e.clientY - tapY) > 10) tapMoved = true;
+});
+cv.addEventListener('pointerup', () => {
+  if (!tapMoved && performance.now() - tapT < 350) shoot(tapX, tapY);
+  dragX = null; dragTilt = 0;
+});
+cv.addEventListener('pointercancel', () => { dragX = null; dragTilt = 0; });
+
+let tapX = 0, tapY = 0, tapT = 0, tapMoved = false, lastShot = 0;
+function shoot(tx, ty){
+  if (!G.running) return;
+  const now = performance.now();
+  if (now - lastShot < 100) return;
+  lastShot = now;
+
+  // aim from the character toward the tap point; default straight up (space bar, or a tap on the character itself)
+  let dx = 0, dy = -1;
+  if (typeof tx === 'number'){
+    const worldTy = ty + G.cam;              // tap is in screen space, bullets live in world space
+    const rdx = tx - P.x, rdy = worldTy - P.y;
+    const len = Math.hypot(rdx, rdy);
+    if (len > 4){ dx = rdx / len; dy = rdy / len; }
+  }
+
+  const speed = 20;
+  const ox = P.x + dx * (P.r + 6), oy = P.y + dy * (P.r + 6);
+  G.bullets.push({ x: ox, y: oy, vx: dx * speed, vy: dy * speed, r: 5 });
+  burst(ox, oy, '#2BB3A3', 4, 2);
+  beep(1046, .08, 'square', .09);
+}
+
+/* ---- sound: a rising pentatonic, one note per chore ---- */
+let AC = null, muted = false;
+const PENT = [0,2,4,7,9,12,14,16,19,21,24];
+function beep(freq, dur, type, vol){
+  if (muted) return;
+  try{
+    if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type || 'triangle'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, AC.currentTime);
+    g.gain.linearRampToValueAtTime(vol || .16, AC.currentTime + .012);
+    g.gain.exponentialRampToValueAtTime(.0001, AC.currentTime + (dur || .18));
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + (dur || .18) + .02);
+  }catch(_){}
+}
+const note = () => {
+  const base = 196 * Math.pow(2, G.tier * 0.25);
+  const f = base * Math.pow(2, PENT[G.note % PENT.length] / 12);
+  G.note++;
+  beep(f, .22, 'triangle', .15);
+};
+document.getElementById('mute').onclick = e => {
+  muted = !muted;
+  e.target.textContent = muted ? 'SOUND OFF' : 'SOUND ON';
+};
+
+/* ---- live tilt diagnostics, so a dead sensor is visible not just silent ---- */
+const tiltstatEl = document.getElementById('tiltstat');
+setInterval(() => {
+  const recentlyActive = tiltEventSeen && (performance.now() - tiltLastSeen < 1000);
+  let line;
+  if (tiltPermState === 'unsupported') line = 'no tilt sensor on this browser — <b>drag</b> to steer';
+  else if (tiltPermState === 'denied')  line = 'tilt permission denied — <b>drag</b> to steer, or allow motion in Settings';
+  else if (tiltPermState === 'error')   line = 'tilt request failed — try <b>ENABLE TILT</b> again';
+  else if (recentlyActive)              line = 'tilt: <b>' + Math.round(tiltRaw) + '°</b>';
+  else if (tiltPermState === 'granted') line = 'tilt granted, no signal yet — try <b>ENABLE TILT</b>, or drag';
+  else                                  line = 'tap <b>ENABLE TILT</b> above, or drag to steer';
+  tiltstatEl.innerHTML = line;
+}, 260);
+
+document.getElementById('retilt').onclick = async () => {
+  tiltBase = null; tiltEventSeen = false;
+  const r = await enableTilt();
+  if (r === 'granted') toast('Tilt enabled. Tip the phone left and right.');
+  else if (r === 'denied') toast('Tilt blocked — check Settings ▸ Safari ▸ Motion & Orientation Access.');
+  else if (r === 'unsupported') toast('This browser has no tilt sensor. Drag instead.');
+  else toast('Could not enable tilt. Drag still works.');
+};
+
+/* ============================ world ============================ */
+const rnd = (a,b) => a + Math.random() * (b - a);
+const tierAt = a => { let t = 0; for (let i=0;i<TIERS.length;i++) if (a >= TIERS[i].at) t = i; return t; };
+
+function addPlatform(y){
+  const t = G.tier;
+  const w = 118;
+  const x = rnd(10, W - w - 10);
+  let kind = 'card';
+  const r = Math.random();
+  if (r < 0.06 + t*0.012) kind = 'spring';
+  else if (r < 0.20 + t*0.045) kind = 'crumble';
+  else if (r < 0.38 + t*0.055) kind = 'move';
+  const list = TIERS[t].chores;
+  G.plats.push({
+    x, y, w, h:16, kind,
+    text: list[(Math.random()*list.length)|0],
+    done:false, gone:false, dead:0,
+    vx: kind === 'move' ? rnd(.7,1.5) * (Math.random()<.5?-1:1) * (1 + t*.14) : 0,
+    tilt: (Math.random()-.5) * 0.06
+  });
+
+  // hazards & goodies ride between the rungs
+  if (Math.random() < 0.05 + t*0.045 && y < G.startY - 400){
+    G.cells.push({ x: rnd(30, W-30), y: y - rnd(28, 52), r: 15,
+      ph: Math.random()*6.3, amp: rnd(24, 70), sp: rnd(.008,.022)*(1+t*.15), hx: rnd(30,W-30) });
+  }
+  if (Math.random() < 0.045){
+    const kinds = ['coffee','glove','iv'];
+    G.ups.push({ x: rnd(24, W-24), y: y - 34, k: kinds[(Math.random()*3)|0], bob: Math.random()*6.3 });
+  }
+}
+
+function reset(){
+  G.plats.length = 0; G.cells.length = 0; G.ups.length = 0; G.fx.length = 0; G.bullets.length = 0;
+  G.chores = 0; G.kills = 0; G.anc = 3; G.inv = 0; G.shield = 0;
+  G.tier = 0; G.note = 0; G.alt = 0; G.shake = 0; G.t = 0;
+  P.x = W/2; P.y = H - 140; P.vx = 0; P.vy = -12; P.face = 1;
+  G.startY = P.y; G.cam = P.y - H*0.6;
+  G.plats.push({ x:W/2-70, y:H-100, w:140, h:16, kind:'card', text:'Get out of bed',
+                 done:false, gone:false, dead:0, vx:0, tilt:0 });
+  G.topY = H - 100;
+  while (G.topY > G.cam - H) { G.topY -= rnd(66, 104); addPlatform(G.topY); }
+  drawPips();
+}
+
+/* ============================ effects ============================ */
+function burst(x, y, color, n, spd){
+  if (reduce) n = Math.min(n, 4);
+  for (let i=0;i<n;i++){
+    const a = Math.random()*6.3;
+    G.fx.push({ x, y, vx:Math.cos(a)*rnd(1,spd), vy:Math.sin(a)*rnd(1,spd)-1,
+                life:1, col:color, s:rnd(2,4.5) });
+  }
+}
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('on'), 1400);
+}
+const bEl = document.getElementById('banner');
+function banner(k, t){
+  document.getElementById('bk').textContent = k;
+  document.getElementById('bt').textContent = t;
+  bEl.classList.add('on');
+  setTimeout(() => bEl.classList.remove('on'), 1900);
+}
+function drawPips(){
+  const el = document.getElementById('anc');
+  el.innerHTML = '';
+  for (let i=0;i<3;i++){
+    const d = document.createElement('div');
+    d.className = 'pip' + (i < G.anc ? '' : ' out');
+    el.appendChild(d);
+  }
+}
+
+/* ============================ update ============================ */
+function update(dt){
+  G.t += dt;
+
+  // steering
+  const tiltIn = Math.max(-1, Math.min(1, tiltRaw / 26));
+  tilt = tiltIn || dragTilt || keyDir;
+  P.vx += tilt * 0.85 * dt;
+  P.vx *= Math.pow(0.94, dt);
+  P.vx = Math.max(-11, Math.min(11, P.vx));
+  P.x += P.vx * dt;
+  if (P.vx > .4) P.face = 1; else if (P.vx < -.4) P.face = -1;
+  if (P.x < -20) P.x = W + 20;
+  if (P.x > W + 20) P.x = -20;
+
+  // gravity
+  P.vy += 0.46 * dt;
+  P.y += P.vy * dt;
+
+  // camera + altitude
+  const line = G.cam + H*0.42;
+  if (P.y < line) G.cam = P.y - H*0.42;
+  const a = Math.max(0, Math.round((G.startY - P.y) / 9));
+  if (a > G.alt){
+    G.alt = a;
+    document.getElementById('altv').innerHTML = a + '<span> m</span>';
+    const nt = tierAt(a);
+    if (nt !== G.tier){ G.tier = nt; G.note = 0; banner(TIERS[nt].key, TIERS[nt].name); beep(660,.3,'sine',.12); }
+  }
+
+  // generate ahead, cull behind
+  while (G.topY > G.cam - H*0.6){ G.topY -= rnd(66, 104 - G.tier*3); addPlatform(G.topY); }
+  const floor = G.cam + H + 120;
+  G.plats = G.plats.filter(p => p.y < floor);
+  G.cells = G.cells.filter(c => c.y < floor);
+  G.ups   = G.ups.filter(u => u.y < floor);
+
+  // platforms
+  for (const p of G.plats){
+    if (p.vx){
+      p.x += p.vx * dt;
+      if (p.x < 6 || p.x + p.w > W - 6) p.vx *= -1;
+    }
+    if (p.dead > 0){ p.dead -= dt * 0.05; if (p.dead <= 0) p.gone = true; }
+    if (p.gone || P.vy <= 0) continue;
+    const feet = P.y + P.r;
+    if (feet > p.y - 2 && feet < p.y + 16 + P.vy*dt &&
+        P.x > p.x - 10 && P.x < p.x + p.w + 10){
+      if (p.kind === 'spring'){ P.vy = -21; beep(880,.16,'square',.12); burst(P.x, p.y, '#2BB3A3', 10, 4); }
+      else { P.vy = -12.6; }
+      if (!p.done){
+        p.done = true; G.chores++; note(); toast(p.text);
+        burst(P.x, p.y, '#FFC24B', 7, 3);
+        if (p.kind === 'crumble') p.dead = 1;
+      }
+    }
+  }
+
+  // cancer cells
+  for (const c of G.cells){
+    c.ph += c.sp * dt;
+    c.x = c.hx + Math.sin(c.ph) * c.amp;
+    if (c.dead) continue;
+    const dx = P.x - c.x, dy = P.y - c.y;
+    if (dx*dx + dy*dy < (P.r + c.r) * (P.r + c.r)){
+      if (P.vy > 1.5 && P.y < c.y - 2){          // stomped from above
+        c.dead = 1; G.kills++; P.vy = -13.5;
+        burst(c.x, c.y, '#FF4D8D', 14, 5);
+        beep(150, .16, 'sawtooth', .1); beep(520, .2, 'triangle', .1);
+      } else if (G.shield > 0){
+        c.dead = 1; G.kills++;
+        burst(c.x, c.y, '#2BB3A3', 12, 5);
+        beep(700, .18, 'sine', .1);
+      } else if (G.inv <= 0){
+        G.anc--; G.inv = 90; G.shake = 12; drawPips();
+        P.vy = -7; P.vx = dx > 0 ? 6 : -6;
+        burst(P.x, P.y, '#FF4D8D', 10, 4);
+        beep(98, .3, 'sawtooth', .14);
+        toast(G.anc > 0 ? 'Neutrophils down. Keep moving.' : '');
+        if (G.anc <= 0) return end('Neutropenia.');
+      }
+    }
+  }
+  // bullets — tap-fired, travel toward wherever was tapped and pop what they touch
+  for (const b of G.bullets){
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+    if (b.dead) continue;
+    for (const c of G.cells){
+      if (c.dead) continue;
+      const dx = b.x - c.x, dy = b.y - c.y;
+      if (dx*dx + dy*dy < (b.r + c.r) * (b.r + c.r)){
+        c.dead = 1; b.dead = 1; G.kills++;
+        burst(c.x, c.y, '#2BB3A3', 13, 5);
+        beep(880, .12, 'square', .1); beep(1318, .1, 'sine', .07);
+        break;
+      }
+    }
+  }
+  G.bullets = G.bullets.filter(b =>
+    !b.dead && b.x > -80 && b.x < W + 80 && b.y > G.cam - 80 && b.y < G.cam + H + 80);
+
+  G.cells = G.cells.filter(c => !c.dead);
+
+  // power-ups
+  for (const u of G.ups){
+    u.bob += 0.06 * dt;
+    if (u.got) continue;
+    if (Math.abs(P.x - u.x) < 24 && Math.abs(P.y - u.y) < 26){
+      u.got = 1;
+      if (u.k === 'coffee'){ P.vy = -27; toast('Espresso. Launch.'); burst(u.x,u.y,'#1B2A3A',16,6); beep(1046,.3,'square',.12); }
+      if (u.k === 'glove'){ G.shield = 480; toast('Cold gloves on. Nothing touches you.'); burst(u.x,u.y,'#2BB3A3',16,5); beep(880,.4,'sine',.12); }
+      if (u.k === 'iv'){
+        const n = G.cells.length;
+        for (const c of G.cells) burst(c.x, c.y, '#FF4D8D', 8, 4);
+        G.kills += n; G.cells.length = 0;
+        toast('Infusion. Screen cleared.'); beep(392,.5,'sine',.13); beep(587,.5,'sine',.1);
+      }
+    }
+  }
+  G.ups = G.ups.filter(u => !u.got);
+
+  if (G.inv > 0) G.inv -= dt;
+  if (G.shield > 0){
+    G.shield -= dt;
+    if (G.shield <= 0) toast('Gloves off.');
+  }
+  if (G.shake > 0) G.shake -= dt * .6;
+
+  // fx
+  for (const f of G.fx){ f.x += f.vx*dt; f.y += f.vy*dt; f.vy += .18*dt; f.life -= .022*dt; }
+  G.fx = G.fx.filter(f => f.life > 0);
+
+  if (P.y > G.cam + H + 70) end('Fell off.');
+}
+
+/* ============================ draw ============================ */
+function drawPaper(){
+  ctx.fillStyle = '#E8F2EC';
+  ctx.fillRect(0,0,W,H);
+  const s = 26, off = -(G.cam % s);
+  ctx.strokeStyle = '#C9DED3'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let y = off - s; y < H + s; y += s){ ctx.moveTo(0, y+.5); ctx.lineTo(W, y+.5); }
+  for (let x = 0; x < W; x += s){ ctx.moveTo(x+.5, 0); ctx.lineTo(x+.5, H); }
+  ctx.stroke();
+
+  // altitude ruler down the left margin
+  ctx.strokeStyle = 'rgba(27,42,58,.22)'; ctx.fillStyle = 'rgba(27,42,58,.45)';
+  ctx.font = '10.5px "Space Mono", monospace'; ctx.textAlign = 'left';
+  const perM = 9;
+  const topM = Math.floor((G.startY - G.cam) / perM);
+  for (let m = Math.floor(topM/25)*25; m > topM - (H/perM) - 25; m -= 25){
+    if (m < 0) break;
+    const y = G.startY - m*perM - G.cam;
+    if (y < -20 || y > H + 20) continue;
+    const major = m % 100 === 0;
+    ctx.beginPath(); ctx.moveTo(0, y+.5); ctx.lineTo(major ? 14 : 7, y+.5); ctx.stroke();
+    if (major && m > 0) ctx.fillText(m, 18, y + 3);
+  }
+}
+
+function drawCard(p){
+  const y = p.y - G.cam;
+  if (y < -40 || y > H + 40) return;
+  ctx.save();
+  ctx.translate(p.x + p.w/2, y);
+  ctx.rotate(p.tilt);
+  ctx.globalAlpha = p.dead > 0 ? Math.max(.15, p.dead) : 1;
+  const w = p.w, h = p.h;
+
+  ctx.fillStyle = 'rgba(27,42,58,.16)';
+  ctx.fillRect(-w/2 + 3, -h/2 + 3, w, h);
+  ctx.fillStyle = '#FFFDF6';
+  ctx.fillRect(-w/2, -h/2, w, h);
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = '#1B2A3A';
+  if (p.kind === 'crumble'){ ctx.setLineDash([4,3]); }
+  ctx.strokeRect(-w/2, -h/2, w, h);
+  ctx.setLineDash([]);
+
+  if (p.kind === 'spring'){
+    ctx.fillStyle = '#2BB3A3';
+    ctx.fillRect(-w/2, -h/2, 5, h);
+    ctx.strokeRect(-w/2, -h/2, 5, h);
+  }
+  if (p.kind === 'move'){       // paperclip
+    ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(w/2 - 4, -h/2 - 1, 4.5, Math.PI*0.9, Math.PI*2.3);
+    ctx.stroke();
+  }
+
+  // checkbox + chore
+  ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.3;
+  ctx.strokeRect(-w/2 + 6, -4.5, 8, 8);
+  if (p.done){
+    ctx.strokeStyle = '#FF4D8D'; ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(-w/2+7, -0.5); ctx.lineTo(-w/2+10, 3); ctx.lineTo(-w/2+15, -6.5);
+    ctx.stroke();
+  }
+  ctx.fillStyle = p.done ? 'rgba(27,42,58,.42)' : '#1B2A3A';
+  ctx.font = '9px "Space Mono", monospace';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  let txt = p.text;
+  while (ctx.measureText(txt).width > w - 26 && txt.length > 4) txt = txt.slice(0, -1);
+  if (txt !== p.text) txt = txt.slice(0,-1) + '…';
+  ctx.fillText(txt, -w/2 + 19, 0);
+  if (p.done){
+    ctx.strokeStyle = 'rgba(27,42,58,.35)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-w/2 + 19, 0); ctx.lineTo(-w/2 + 19 + ctx.measureText(txt).width, 0);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCell(c){
+  const y = c.y - G.cam;
+  if (y < -60 || y > H + 60) return;
+  ctx.save();
+  ctx.translate(c.x, y);
+  const t = G.t * .05 + c.ph;
+  ctx.beginPath();
+  for (let i=0;i<=24;i++){
+    const a = i/24 * Math.PI*2;
+    const r = c.r + Math.sin(a*3 + t)*2.4 + Math.sin(a*5 - t*1.3)*1.6;
+    const x = Math.cos(a)*r, yy = Math.sin(a)*r;
+    i ? ctx.lineTo(x,yy) : ctx.moveTo(x,yy);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#FF4D8D'; ctx.fill();
+  ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.fillStyle = '#C81E5F';
+  ctx.beginPath(); ctx.arc(Math.sin(t)*2, Math.cos(t*.8)*2, 5.2, 0, 6.3); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.5)';
+  ctx.beginPath(); ctx.arc(-5, -5, 2.4, 0, 6.3); ctx.fill();
+  ctx.restore();
+}
+
+function drawBullet(b){
+  const y = b.y - G.cam;
+  if (y < -40 || y > H + 40 || b.x < -40 || b.x > W + 40) return;
+  ctx.save();
+  ctx.translate(b.x, y);
+  ctx.rotate(Math.atan2(b.vx, -b.vy));   // nose points along the direction it was fired
+  ctx.globalAlpha = .3;
+  ctx.fillStyle = '#2BB3A3';
+  ctx.beginPath(); ctx.ellipse(0, 11, 2.6, 6, 0, 0, 6.3); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.beginPath(); ctx.ellipse(0, 0, 4, 8.5, 0, 0, 6.3); ctx.fill();
+  ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.3; ctx.stroke();
+  ctx.restore();
+}
+
+function drawUp(u){
+  const y = u.y - G.cam + Math.sin(u.bob) * 4;
+  if (y < -40 || y > H + 40) return;
+  ctx.save();
+  ctx.translate(u.x, y);
+  ctx.beginPath(); ctx.arc(0,0,17,0,6.3);
+  ctx.fillStyle = '#FFFDF6'; ctx.fill();
+  ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.font = '17px system-ui, "Apple Color Emoji", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(u.k === 'coffee' ? '☕' : u.k === 'glove' ? '🧤' : '💧', 0, 1);
+  ctx.restore();
+}
+
+function drawPlayer(){
+  const y = P.y - G.cam;
+  ctx.save();
+  ctx.translate(P.x, y);
+  if (G.inv > 0 && Math.floor(G.t/4) % 2) ctx.globalAlpha = .38;
+  const sy = 1 + Math.max(-.18, Math.min(.22, P.vy * .012));
+  ctx.scale(P.face * (2 - sy), sy);
+
+  if (G.shield > 0){
+    ctx.beginPath(); ctx.arc(0, 0, 25, 0, 6.3);
+    ctx.strokeStyle = '#2BB3A3'; ctx.lineWidth = 2.5;
+    ctx.setLineDash([5,4]); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // cardigan
+  ctx.fillStyle = '#1B2A3A';
+  ctx.beginPath();
+  ctx.moveTo(-10, 2); ctx.quadraticCurveTo(0, 22, 10, 2);
+  ctx.quadraticCurveTo(0, 8, -10, 2); ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = '#1B2A3A'; ctx.lineCap = 'round';
+  const arm = P.vy < 0 ? -8 : 4;
+  ctx.beginPath();
+  ctx.moveTo(-8, 5); ctx.lineTo(-15, 5 + arm);
+  ctx.moveTo(8, 5);  ctx.lineTo(15, 5 + arm);
+  ctx.stroke();
+
+  // head
+  ctx.beginPath(); ctx.arc(0, -6, 11, 0, 6.3);
+  ctx.fillStyle = '#F2D9C4'; ctx.fill();
+  ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.6; ctx.stroke();
+
+  if (G.head === 'buckethat'){
+    // crown — rounded dome sitting on top of the head
+    ctx.beginPath(); ctx.arc(0, -10, 12, Math.PI*1.05, Math.PI*1.95);
+    ctx.closePath();
+    ctx.fillStyle = '#FFC24B'; ctx.fill(); ctx.stroke();
+    // brim — wide flattened rim skirting the base of the crown
+    ctx.beginPath(); ctx.ellipse(0, -7.5, 17, 4.4, 0, 0, 6.3);
+    ctx.fillStyle = '#FFC24B'; ctx.fill(); ctx.stroke();
+    // hat band
+    ctx.beginPath(); ctx.moveTo(-9.5, -10); ctx.lineTo(9.5, -10);
+    ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.1; ctx.stroke();
+  } else if (G.head === 'bangs'){
+    ctx.beginPath(); ctx.arc(0, -8, 12.5, Math.PI*1.02, Math.PI*1.98);
+    ctx.lineTo(11, -6); ctx.lineTo(6,-10); ctx.lineTo(1,-6); ctx.lineTo(-4,-10);
+    ctx.lineTo(-9,-6); ctx.lineTo(-11,-6); ctx.closePath();
+    ctx.fillStyle = '#5A3A2E'; ctx.fill(); ctx.stroke();
+  } else {
+    ctx.strokeStyle = '#FFC24B'; ctx.lineWidth = 1.6;
+    for (let i=0;i<3;i++){
+      const a = -2.5 + i*0.75;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*14, -6 + Math.sin(a)*14);
+      ctx.lineTo(Math.cos(a)*18, -6 + Math.sin(a)*18);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#1B2A3A';
+  }
+
+  // glasses + smile
+  ctx.lineWidth = 1.4; ctx.strokeStyle = '#1B2A3A';
+  ctx.beginPath(); ctx.arc(-4.2,-6,3.4,0,6.3); ctx.moveTo(4.2+3.4,-6);
+  ctx.arc(4.2,-6,3.4,0,6.3); ctx.moveTo(-0.8,-6); ctx.lineTo(0.8,-6); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0,-1.5,3.2, .25, Math.PI-.25); ctx.stroke();
+  ctx.restore();
+}
+
+function draw(){
+  ctx.save();
+  if (G.shake > 0) ctx.translate(rnd(-G.shake,G.shake)*.4, rnd(-G.shake,G.shake)*.4);
+  drawPaper();
+  for (const p of G.plats) if (!p.gone) drawCard(p);
+  for (const u of G.ups) drawUp(u);
+  for (const c of G.cells) drawCell(c);
+  for (const b of G.bullets) drawBullet(b);
+  for (const f of G.fx){
+    ctx.globalAlpha = Math.max(0, f.life);
+    ctx.fillStyle = f.col;
+    ctx.fillRect(f.x - f.s/2, f.y - G.cam - f.s/2, f.s, f.s);
+  }
+  ctx.globalAlpha = 1;
+  drawPlayer();
+  ctx.restore();
+}
+
+/* ============================ loop ============================ */
+let last = 0;
+function frame(ts){
+  requestAnimationFrame(frame);
+  const dt = Math.min(2.6, (ts - last) / 16.667) || 1;
+  last = ts;
+  if (G.running) update(dt);
+  draw();
+}
+requestAnimationFrame(frame);
+
+/* ============================ flow ============================ */
+async function loadBest(){
+  try{ const r = await window.storage.get('chore-climb:best'); if (r) G.best = +r.value || 0; }catch(_){}
+}
+async function saveBest(){
+  try{ await window.storage.set('chore-climb:best', String(G.best)); }catch(_){}
+}
+loadBest();
+
+function end(reason){
+  if (!G.running) return;
+  G.running = false;
+  if (G.alt > G.best){ G.best = G.alt; saveBest(); }
+  document.getElementById('overtitle').textContent = reason;
+  document.getElementById('overline').textContent = OVERLINES[(Math.random()*OVERLINES.length)|0];
+  document.getElementById('s1').textContent = G.alt;
+  document.getElementById('s2').textContent = G.chores;
+  document.getElementById('s3').textContent = G.kills;
+  document.getElementById('s4').textContent = G.best;
+  document.getElementById('over').classList.remove('hide');
+  beep(220,.4,'sine',.1);
+}
+
+document.querySelectorAll('[data-head]').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('[data-head]').forEach(x => x.classList.remove('sel'));
+    b.classList.add('sel');
+    G.head = b.dataset.head;
+  };
+});
+
+async function start(){
+  const r = await enableTilt();
+  tiltBase = null; tiltEventSeen = false;
+  document.getElementById('start').classList.add('hide');
+  document.getElementById('over').classList.add('hide');
+  reset();
+  G.running = true;
+  banner(TIERS[0].key, TIERS[0].name);
+  if (!AC) beep(392,.2,'triangle',.1);
+  if (r === 'denied') toast('Tilt blocked by the browser — drag left/right to steer.');
+  else if (r === 'unsupported') toast('No tilt sensor here — drag left/right to steer.');
+}
+document.getElementById('go').onclick = start;
+document.getElementById('again').onclick = start;
+
+reset();
+G.running = false;
+})();
+</script>
+</body>
+</html>
