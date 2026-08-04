@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Cycle Blaster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#0b1024;
+    --bg-mid:#141b3d;
+    --teal:#2dd4bf;
+    --teal-glow:#7ef4e8;
+    --coral:#ff6b6b;
+    --coral-dark:#c94a4a;
+    --gold:#ffd166;
+    --ink:#eef2fb;
+    --ink-dim:#9aa4c7;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{
+    margin:0; padding:0; height:100%; overflow:hidden;
+    background: radial-gradient(120% 120% at 50% 0%, var(--bg-mid), var(--bg-deep) 60%);
+    font-family:'Inter', sans-serif;
+    color:var(--ink);
+    touch-action:none;
+    user-select:none;
+  }
+  #wrap{ position:relative; width:100%; height:100vh; }
+  canvas{ display:block; width:100%; height:100%; }
+
+  .hud{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:14px 16px 0 16px;
+    pointer-events:none;
+    font-family:'Baloo 2', sans-serif;
+  }
+  .hud .chip{
+    background:rgba(20,27,61,0.7);
+    border:1px solid rgba(125,244,232,0.25);
+    border-radius:14px;
+    padding:6px 12px;
+    font-size:14px;
+    letter-spacing:0.02em;
+    backdrop-filter: blur(4px);
+  }
+  .hud .chip b{ color:var(--teal-glow); font-size:16px; }
+  .hud .score{ font-size:22px; font-weight:800; color:var(--gold); }
+
+  .center-panel{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    flex-direction:column;
+    text-align:center;
+    padding:24px;
+    background:rgba(11,16,36,0.55);
+    backdrop-filter: blur(2px);
+  }
+  .center-panel.hidden{ display:none; }
+  .center-panel h1{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:800;
+    font-size:clamp(32px, 9vw, 52px);
+    margin:0 0 6px 0;
+    color:var(--ink);
+    text-shadow: 0 0 24px rgba(45,212,191,0.45);
+  }
+  .center-panel .sub{
+    font-size:15px;
+    color:var(--ink-dim);
+    max-width:340px;
+    margin:0 0 22px 0;
+    line-height:1.5;
+  }
+  .btn{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:700;
+    font-size:19px;
+    color:#0b1024;
+    background: linear-gradient(180deg, var(--teal-glow), var(--teal));
+    border:none;
+    border-radius:999px;
+    padding:14px 34px;
+    box-shadow: 0 6px 0 #1c9d8f, 0 10px 24px rgba(45,212,191,0.35);
+    letter-spacing:0.02em;
+    cursor:pointer;
+  }
+  .btn:active{ transform: translateY(4px); box-shadow: 0 2px 0 #1c9d8f; }
+  .wave-banner{
+    font-family:'Baloo 2', sans-serif;
+    font-weight:800;
+    font-size:15px;
+    color:var(--gold);
+    letter-spacing:0.08em;
+    margin-bottom:10px;
+    text-transform:uppercase;
+  }
+  .legend{
+    position:absolute; bottom:10px; left:0; right:0;
+    text-align:center; font-size:11px; color:var(--ink-dim);
+    pointer-events:none;
+  }
+  .stars{ position:absolute; inset:0; pointer-events:none; }
+
+  .symptom-banner{
+    position:absolute;
+    top:58px; left:50%;
+    transform: translateX(-50%) translateY(-8px);
+    display:flex; align-items:center; gap:8px;
+    background:rgba(20,27,61,0.88);
+    border:1px solid rgba(255,209,102,0.4);
+    border-radius:12px;
+    padding:7px 14px;
+    font-family:'Baloo 2', sans-serif;
+    font-size:13px;
+    color:var(--gold);
+    opacity:0;
+    pointer-events:none;
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    white-space:nowrap;
+    z-index:5;
+  }
+  .symptom-banner.show{
+    opacity:1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .symptom-banner.pulse{
+    animation: symptomPulse 0.5s ease;
+  }
+  @keyframes symptomPulse{
+    0%{ transform: translateX(-50%) translateY(0) scale(1.28); box-shadow: 0 0 0 3px rgba(255,209,102,0.6); }
+    100%{ transform: translateX(-50%) translateY(0) scale(1); box-shadow: 0 0 0 0 rgba(255,209,102,0); }
+  }
+  .symptom-banner #symptomIcon{ font-size:16px; }
+  .symptom-bar{
+    width:46px; height:4px; border-radius:2px;
+    background:rgba(255,255,255,0.15);
+    overflow:hidden;
+  }
+  .symptom-bar-fill{
+    height:100%; width:100%;
+    background: var(--gold);
+    transform-origin: left;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+
+  <div class="hud">
+    <div class="chip">Cycle <b id="cycleNum">1</b>/6</div>
+    <div class="chip score" id="scoreChip">0</div>
+    <div class="chip">Shield <b id="shieldNum">3</b></div>
+  </div>
+
+  <div class="symptom-banner" id="symptomBanner">
+    <span id="symptomIcon">😮‍💨</span>
+    <span id="symptomText">Fatigue — moving slower</span>
+    <div class="symptom-bar"><div class="symptom-bar-fill" id="symptomBarFill"></div></div>
+  </div>
+
+  <div class="center-panel" id="startPanel">
+    <div class="wave-banner">Cycle Blaster</div>
+    <h1>Beat every cell.</h1>
+    <p class="sub">Tap or drag to move your port. Tap anywhere to fire chemo blasts at incoming cancer cells. Survive all 6 cycles &mdash; watch out for the boss cell at the end of each one.</p>
+    <button class="btn" id="startBtn">Start Treatment</button>
+  </div>
+
+  <div class="center-panel hidden" id="waveClearPanel">
+    <div class="wave-banner" id="waveClearLabel">Cycle 1 Complete</div>
+    <h1 id="waveClearTitle">Nice work.</h1>
+    <p class="sub" id="waveClearSub">Counts recovering. Get ready for the next cycle.</p>
+    <button class="btn" id="nextBtn">Begin Next Cycle</button>
+  </div>
+
+  <div class="center-panel hidden" id="gameOverPanel">
+    <div class="wave-banner">Shield Depleted</div>
+    <h1>Take a breather.</h1>
+    <p class="sub" id="gameOverSub">Even the toughest rounds knock you down sometimes. Try again whenever you're ready.</p>
+    <button class="btn" id="retryBtn">Retry Cycle</button>
+  </div>
+
+  <div class="center-panel hidden" id="winPanel">
+    <div class="wave-banner">All 6 Cycles Complete</div>
+    <h1>Treatment finished. 🎉</h1>
+    <p class="sub">Every cell, every cycle, beaten. That's the whole regimen &mdash; well done.</p>
+    <button class="btn" id="playAgainBtn">Play Again</button>
+  </div>
+
+  <div class="legend">chemo blasts • cryotherapy shield • CA-125 power orb</div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let W, H, DPR;
+
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- State ----------
+  const TOTAL_CYCLES = 6;
+  let state = 'start'; // start | playing | waveclear | gameover | win
+  let cycle = 1;
+  let score = 0;
+  let shield = 3;
+  let cellsToBeatThisWave = 0;
+  let cellsBeatenThisWave = 0;
+  let bossSpawned = false;
+  let bossAlive = false;
+
+  const player = { x: 0, y: 0, r: 22, targetX: 0 };
+  let blasts = [];
+  let cells = [];
+  let orbs = [];
+  let particles = [];
+  let lastSpawn = 0;
+  let spawnInterval = 1100;
+  let lastShot = 0;
+  const baseShotCooldown = 150;
+  let elapsed = 0;
+
+  // ---------- Symptom hurdle system ----------
+  // Random, temporary "side effects" that mix up each cycle instead of a flat difficulty ramp.
+  let symptom = null; // { key, timeLeft, total }
+  let symptomCooldown = 2500;
+  let moveLerp = 0.18;
+  let cooldownMult = 1;
+  let blastRadiusMult = 1;
+  let spawnMult = 1;
+  let boundsInset = 0;
+  let aimJitter = 0;
+  let shakeAmt = 0;
+  let canvasFilter = 'none';
+  let symptomFlash = 0;
+
+  const SYMPTOM_DEFS = [
+    { key:'fatigue', label:'Fatigue \u2014 moving & firing much slower', icon:'\ud83d\ude2e\u200d\ud83d\udca8',
+      apply(){ moveLerp = 0.035; cooldownMult = 2.3; canvasFilter = 'brightness(0.72) saturate(0.75)'; } },
+    { key:'nausea', label:'Nausea \u2014 aim is way off, screen swimming', icon:'\ud83e\udd22',
+      apply(){ aimJitter = 34; shakeAmt = 6; canvasFilter = 'blur(1.1px) saturate(0.6) hue-rotate(-8deg)'; } },
+    { key:'neuropathy', label:'Neuropathy \u2014 blasts tiny, hard to land hits', icon:'\u2744\ufe0f',
+      apply(){ blastRadiusMult = 0.32; canvasFilter = 'saturate(0.7) brightness(0.95)'; } },
+    { key:'lowcounts', label:'Low counts \u2014 cells flooding in fast', icon:'\ud83e\udea9',
+      apply(){ spawnMult = 0.28; canvasFilter = 'none'; } },
+    { key:'bloating', label:'Bloating \u2014 range badly pinched', icon:'\ud83c\udf88',
+      apply(){ boundsInset = 130; canvasFilter = 'none'; } },
+  ];
+
+  function clearSymptomEffects(){
+    moveLerp = 0.18; cooldownMult = 1; blastRadiusMult = 1;
+    spawnMult = 1; boundsInset = 0; aimJitter = 0; shakeAmt = 0;
+    canvasFilter = 'none';
+  }
+
+  function hideSymptomBanner(){
+    document.getElementById('symptomBanner').classList.remove('show');
+  }
+
+  function maybeTriggerSymptom(){
+    const def = SYMPTOM_DEFS[Math.floor(Math.random()*SYMPTOM_DEFS.length)];
+    const duration = 3600 + Math.random()*1800 + cycle*140;
+    symptom = { key: def.key, timeLeft: duration, total: duration };
+    clearSymptomEffects();
+    def.apply();
+    symptomFlash = 260;
+    const banner = document.getElementById('symptomBanner');
+    document.getElementById('symptomIcon').textContent = def.icon;
+    document.getElementById('symptomText').textContent = def.label;
+    banner.classList.add('show');
+    banner.classList.remove('pulse');
+    void banner.offsetWidth;
+    banner.classList.add('pulse');
+  }
+
+  function updateSymptom(dt){
+    if(symptom){
+      symptom.timeLeft -= dt;
+      const fill = document.getElementById('symptomBarFill');
+      fill.style.transform = 'scaleX(' + Math.max(symptom.timeLeft/symptom.total,0) + ')';
+      if(symptom.timeLeft <= 0){
+        symptom = null;
+        clearSymptomEffects();
+        hideSymptomBanner();
+        symptomCooldown = 2200 + Math.random()*1800;
+      }
+    } else {
+      symptomCooldown -= dt;
+      if(symptomCooldown <= 0){
+        maybeTriggerSymptom();
+      }
+    }
+  }
+
+  function resetPlayer(){
+    player.x = W/2; player.y = H - 110; player.targetX = player.x;
+  }
+
+  function startCycle(n){
+    cycle = n;
+    cellsToBeatThisWave = 11 + (n-1)*2;
+    cellsBeatenThisWave = 0;
+    bossSpawned = false; bossAlive = false;
+    blasts = []; cells = []; orbs = []; particles = [];
+    spawnInterval = Math.max(480, 880 - n*30);
+    symptom = null; clearSymptomEffects(); hideSymptomBanner();
+    symptomCooldown = 2000 + Math.random()*1500;
+    resetPlayer();
+    document.getElementById('cycleNum').textContent = n;
+    state = 'playing';
+  }
+
+  function fullReset(){
+    score = 0; shield = 3;
+    document.getElementById('scoreChip').textContent = score;
+    document.getElementById('shieldNum').textContent = shield;
+    startCycle(1);
+  }
+
+  // ---------- Input ----------
+  let pointerActive = false;
+
+  function toLocal(clientX, clientY){
+    const rect = canvas.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function onPointerDown(e){
+    if(state !== 'playing') return;
+    pointerActive = true;
+    const p = toLocal(e.clientX ?? e.touches[0].clientX, e.clientY ?? e.touches[0].clientY);
+    player.targetX = p.x;
+    tryShoot();
+  }
+  function onPointerMove(e){
+    if(state !== 'playing' || !pointerActive) return;
+    const t = e.touches ? e.touches[0] : e;
+    const p = toLocal(t.clientX, t.clientY);
+    player.targetX = p.x;
+  }
+  function onPointerUp(){ pointerActive = false; }
+
+  canvas.addEventListener('mousedown', onPointerDown);
+  canvas.addEventListener('mousemove', onPointerMove);
+  window.addEventListener('mouseup', onPointerUp);
+  canvas.addEventListener('touchstart', function(e){ e.preventDefault(); onPointerDown(e); }, {passive:false});
+  canvas.addEventListener('touchmove', function(e){ e.preventDefault(); onPointerMove(e); }, {passive:false});
+  canvas.addEventListener('touchend', function(e){ e.preventDefault(); onPointerUp(); }, {passive:false});
+
+  function tryShoot(){
+    const now = performance.now();
+    if(now - lastShot < baseShotCooldown * cooldownMult) return;
+    lastShot = now;
+    const jitter = aimJitter ? (Math.random()-0.5)*aimJitter : 0;
+    blasts.push({ x: player.x + jitter, y: player.y - player.r - 4, r: 7 * blastRadiusMult, speed: 9.5, kind: 'carbo' });
+  }
+
+  // ---------- Entities ----------
+  function spawnCell(){
+    const isBoss = (!bossSpawned && cellsBeatenThisWave >= cellsToBeatThisWave - 1);
+    const r = isBoss ? 46 : (16 + Math.random()*14);
+    const hp = isBoss ? 8 + cycle : 1 + Math.floor((cycle-1)/5);
+    const x = 30 + Math.random() * (W - 60);
+    cells.push({
+      x, y: -r-10, r, hp, maxHp: hp,
+      vy: isBoss ? 0.4 + cycle*0.015 : (0.75 + Math.random()*0.4 + cycle*0.02),
+      vx: isBoss ? (Math.random()<0.5?-1:1) * (0.45+cycle*0.02) : (Math.random()-0.5)*0.5,
+      wobble: Math.random()*Math.PI*2,
+      isBoss,
+      hitFlash: 0
+    });
+    if(isBoss){ bossSpawned = true; bossAlive = true; }
+  }
+
+  function spawnOrb(x,y){
+    if(Math.random() < 0.18){
+      orbs.push({ x, y, r: 10, vy: 1.4, life: 6000 });
+    }
+  }
+
+  function spawnParticles(x,y,color,n){
+    for(let i=0;i<n;i++){
+      const a = Math.random()*Math.PI*2;
+      const sp = 1 + Math.random()*3;
+      particles.push({ x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, life: 400+Math.random()*300, color, r: 2+Math.random()*2 });
+    }
+  }
+
+  // ---------- Update ----------
+  function update(dt){
+    // player follows target
+    player.x += (player.targetX - player.x) * moveLerp;
+    player.x = Math.max(player.r + boundsInset, Math.min(W - player.r - boundsInset, player.x));
+
+    if(symptomFlash > 0) symptomFlash -= dt;
+
+    // auto-fire while held
+    if(pointerActive) tryShoot();
+
+    updateSymptom(dt);
+
+    // spawn
+    lastSpawn += dt;
+    const activeNonBoss = cells.filter(c=>!c.isBoss).length;
+    if(lastSpawn > spawnInterval * spawnMult && !bossAlive && cellsBeatenThisWave < cellsToBeatThisWave){
+      lastSpawn = 0;
+      spawnCell();
+    }
+
+    // blasts
+    blasts.forEach(b => b.y -= b.speed);
+    blasts = blasts.filter(b => b.y > -20);
+
+    // cells
+    cells.forEach(c => {
+      c.wobble += 0.05;
+      c.x += c.vx + Math.sin(c.wobble)*0.3;
+      c.y += c.vy;
+      if(c.x < c.r) c.vx = Math.abs(c.vx);
+      if(c.x > W - c.r) c.vx = -Math.abs(c.vx);
+      if(c.hitFlash > 0) c.hitFlash -= dt;
+    });
+
+    // cell reaches bottom -> damage shield
+    for(let i = cells.length-1; i>=0; i--){
+      const c = cells[i];
+      if(c.y - c.r > H){
+        cells.splice(i,1);
+        shield -= c.isBoss ? 2 : 1;
+        document.getElementById('shieldNum').textContent = Math.max(shield,0);
+        spawnParticles(c.x, H-20, '#ff6b6b', 14);
+        if(shield <= 0){ triggerGameOver(); return; }
+      }
+    }
+
+    // collisions: blast vs cell
+    for(let i = blasts.length-1; i>=0; i--){
+      const b = blasts[i];
+      for(let j = cells.length-1; j>=0; j--){
+        const c = cells[j];
+        const dx = b.x-c.x, dy = b.y-c.y;
+        if(Math.hypot(dx,dy) < b.r + c.r){
+          blasts.splice(i,1);
+          c.hp -= 1;
+          c.hitFlash = 120;
+          spawnParticles(b.x,b.y, c.isBoss ? '#ffd166' : '#2dd4bf', 6);
+          if(c.hp <= 0){
+            score += c.isBoss ? 250 : 10 * cycle;
+            document.getElementById('scoreChip').textContent = score;
+            spawnParticles(c.x,c.y, '#ff6b6b', 22);
+            spawnOrb(c.x,c.y);
+            cells.splice(j,1);
+            cellsBeatenThisWave += 1;
+            if(c.isBoss) bossAlive = false;
+          }
+          break;
+        }
+      }
+    }
+
+    // orbs (CA-125 power orb: shrinks a random enemy / grants tiny shield now and then)
+    for(let i = orbs.length-1; i>=0; i--){
+      const o = orbs[i];
+      o.y += o.vy; o.life -= dt;
+      const dx = o.x-player.x, dy=o.y-player.y;
+      if(Math.hypot(dx,dy) < o.r + player.r){
+        score += 40;
+        document.getElementById('scoreChip').textContent = score;
+        if(Math.random() < 0.35 && shield < 3){ shield += 1; document.getElementById('shieldNum').textContent = shield; }
+        spawnParticles(o.x,o.y,'#ffd166',16);
+        orbs.splice(i,1);
+        continue;
+      }
+      if(o.life <= 0 || o.y > H+20) orbs.splice(i,1);
+    }
+
+    // particles
+    particles.forEach(p => { p.x+=p.vx; p.y+=p.vy; p.vy+=0.03; p.life -= dt; });
+    particles = particles.filter(p => p.life > 0);
+
+    // wave clear check
+    if(state === 'playing' && cellsBeatenThisWave >= cellsToBeatThisWave && cells.length === 0 && blasts.length === 0){
+      triggerWaveClear();
+    }
+  }
+
+  function triggerWaveClear(){
+    state = 'waveclear';
+    const label = document.getElementById('waveClearLabel');
+    const title = document.getElementById('waveClearTitle');
+    const sub = document.getElementById('waveClearSub');
+    label.textContent = 'Cycle ' + cycle + ' Complete';
+    if(cycle >= TOTAL_CYCLES){
+      showPanel('winPanel');
+      state = 'win';
+      return;
+    }
+    title.textContent = cycle === TOTAL_CYCLES - 1 ? 'One more to go.' : 'Nice work.';
+    sub.textContent = 'Counts recovering. Get ready for Cycle ' + (cycle+1) + '.';
+    showPanel('waveClearPanel');
+  }
+
+  function triggerGameOver(){
+    state = 'gameover';
+    showPanel('gameOverPanel');
+  }
+
+  function showPanel(id){
+    ['startPanel','waveClearPanel','gameOverPanel','winPanel'].forEach(pid=>{
+      document.getElementById(pid).classList.toggle('hidden', pid !== id);
+    });
+  }
+  function hideAllPanels(){
+    ['startPanel','waveClearPanel','gameOverPanel','winPanel'].forEach(pid=>{
+      document.getElementById(pid).classList.add('hidden');
+    });
+  }
+
+  // ---------- Draw ----------
+  function drawBackground(){
+    ctx.fillStyle = 'rgba(11,16,36,1)';
+    ctx.fillRect(0,0,W,H);
+    // ambient drifting particles (bloodstream feel)
+    ctx.save();
+    for(let i=0;i<28;i++){
+      const t = (elapsed*0.02 + i*137) % 1000;
+      const x = (i*67 % W);
+      const y = (t*1.7) % H;
+      ctx.globalAlpha = 0.06 + 0.04*Math.sin(i+elapsed*0.001);
+      ctx.fillStyle = '#2dd4bf';
+      ctx.beginPath(); ctx.arc(x,y, 1.5+ (i%3), 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawPlayer(){
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    const grad = ctx.createRadialGradient(0,0,2,0,0,player.r+6);
+    grad.addColorStop(0, '#bffcf3');
+    grad.addColorStop(1, '#2dd4bf');
+    ctx.fillStyle = grad;
+    ctx.shadowColor = 'rgba(45,212,191,0.7)';
+    ctx.shadowBlur = 18;
+    ctx.beginPath(); ctx.arc(0,0,player.r,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#0b1024';
+    ctx.beginPath(); ctx.arc(0,-2,player.r*0.34,0,Math.PI*2); ctx.fill();
+    if(symptom && symptom.key === 'neuropathy'){
+      ctx.strokeStyle = 'rgba(200,240,255,0.9)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([4,4]);
+      ctx.beginPath(); ctx.arc(0,0,player.r+7,0,Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if(symptom && symptom.key === 'fatigue'){
+      ctx.strokeStyle = 'rgba(154,164,199,0.8)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0,0,player.r+7,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawCell(c){
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    const base = c.isBoss ? '#ff8c42' : '#ff6b6b';
+    const dark = c.isBoss ? '#c9541a' : '#c94a4a';
+    ctx.fillStyle = c.hitFlash > 0 ? '#ffffff' : base;
+    ctx.beginPath();
+    for(let i=0;i<10;i++){
+      const ang = i/10*Math.PI*2;
+      const rr = c.r * (1 + 0.08*Math.sin(ang*3 + c.wobble));
+      const px = Math.cos(ang)*rr, py = Math.sin(ang)*rr;
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = dark;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.arc(c.r*0.2,-c.r*0.15, c.r*0.28, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-c.r*0.3,c.r*0.2, c.r*0.18, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // hp pip bar for boss
+    if(c.isBoss){
+      const w = 70;
+      ctx.save();
+      ctx.translate(c.x - w/2, c.y - c.r - 16);
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(0,0,w,7);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillRect(0,0,w*(c.hp/c.maxHp),7);
+      ctx.restore();
+    }
+  }
+
+  function drawBlast(b){
+    ctx.save();
+    ctx.translate(b.x,b.y);
+    ctx.fillStyle = '#7ef4e8';
+    ctx.shadowColor = '#2dd4bf';
+    ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(0,0,b.r,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawOrb(o){
+    ctx.save();
+    ctx.translate(o.x,o.y);
+    ctx.fillStyle = '#ffd166';
+    ctx.shadowColor = '#ffd166';
+    ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.arc(0,0,o.r,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawParticles(){
+    particles.forEach(p=>{
+      ctx.save();
+      ctx.globalAlpha = Math.max(p.life/500,0);
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    });
+  }
+
+  function draw(){
+    ctx.save();
+    if(canvasFilter && canvasFilter !== 'none'){ ctx.filter = canvasFilter; }
+    if(shakeAmt > 0){
+      ctx.translate((Math.random()-0.5)*shakeAmt, (Math.random()-0.5)*shakeAmt);
+    }
+    drawBackground();
+    orbs.forEach(drawOrb);
+    cells.forEach(drawCell);
+    blasts.forEach(drawBlast);
+    drawParticles();
+    if(state === 'playing') drawPlayer();
+    ctx.filter = 'none';
+
+    // bloating: visible narrowed walls
+    if(boundsInset > 0){
+      ctx.fillStyle = 'rgba(255,209,102,0.16)';
+      ctx.fillRect(0,0,boundsInset,H);
+      ctx.fillRect(W-boundsInset,0,boundsInset,H);
+      ctx.strokeStyle = 'rgba(255,209,102,0.5)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(boundsInset,0); ctx.lineTo(boundsInset,H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(W-boundsInset,0); ctx.lineTo(W-boundsInset,H); ctx.stroke();
+    }
+
+    // low counts: pulsing red vignette warning
+    if(symptom && symptom.key === 'lowcounts'){
+      const pulse = 0.18 + 0.14*Math.sin(elapsed*0.008);
+      const g = ctx.createRadialGradient(W/2,H/2, H*0.3, W/2,H/2, H*0.75);
+      g.addColorStop(0,'rgba(255,107,107,0)');
+      g.addColorStop(1,'rgba(255,60,60,'+pulse+')');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,W,H);
+    }
+
+    // screen flash on symptom onset
+    if(symptomFlash > 0){
+      ctx.fillStyle = 'rgba(255,209,102,' + (symptomFlash/260*0.35) + ')';
+      ctx.fillRect(0,0,W,H);
+    }
+
+    ctx.restore();
+  }
+
+  // ---------- Loop ----------
+  let lastTime = performance.now();
+  function loop(now){
+    const dt = Math.min(now - lastTime, 40);
+    lastTime = now;
+    elapsed += dt;
+    if(state === 'playing') update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ---------- Buttons ----------
+  document.getElementById('startBtn').addEventListener('click', ()=>{
+    hideAllPanels();
+    fullReset();
+  });
+  document.getElementById('nextBtn').addEventListener('click', ()=>{
+    hideAllPanels();
+    startCycle(cycle+1);
+  });
+  document.getElementById('retryBtn').addEventListener('click', ()=>{
+    hideAllPanels();
+    shield = 3;
+    document.getElementById('shieldNum').textContent = shield;
+    startCycle(cycle);
+  });
+  document.getElementById('playAgainBtn').addEventListener('click', ()=>{
+    hideAllPanels();
+    fullReset();
+  });
+
+})();
+</script>
+</body>
+</html>
