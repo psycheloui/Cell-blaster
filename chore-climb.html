@@ -248,7 +248,7 @@ const G = {
   chores:0, kills:0, anc:3, inv:0, shield:0,
   head:'buckethat', tier:0, note:0,
   plats:[], cells:[], ups:[], fx:[], bullets:[],
-  topY:0, shake:0
+  topY:0, shake:0, lastX:0, lastY:0, lastVy:-12.6
 };
 const P = { x:0, y:0, vx:0, vy:0, r:15, face:1 };
 
@@ -380,23 +380,66 @@ document.getElementById('retilt').onclick = async () => {
 const rnd = (a,b) => a + Math.random() * (b - a);
 const tierAt = a => { let t = 0; for (let i=0;i<TIERS.length;i++) if (a >= TIERS[i].at) t = i; return t; };
 
+// Simulates the exact bounce physics from update() to find how far sideways a jump
+// can carry the player (worst case: standing still horizontally at takeoff) by the
+// time it climbs `gap` pixels. Used so generated rungs are never placed further apart
+// than a jump can actually cover.
+function jumpReach(gap, vy0){
+  let vx = 0, x = 0, vy = vy0, y = 0;
+  for (let i = 0; i < 240; i++){
+    vx += 0.85; vx *= 0.94;
+    if (vx > 11) vx = 11; else if (vx < -11) vx = -11;
+    x += vx;
+    vy += 0.46;
+    y += vy;
+    if (-y >= gap) return { x, frames: i };
+  }
+  return { x, frames: 240 };            // gap unreachable at this vy0 — shouldn't happen in practice
+}
+const REACH_SAFETY = 0.7;   // leaves margin for reaction time / imperfect tilt input
+
 function addPlatform(y){
   const t = G.tier;
   const w = 118;
-  const x = rnd(10, W - w - 10);
+
+  const gap = G.lastY - y;
+  const jr = jumpReach(gap, G.lastVy);
+  const reach = jr.x * REACH_SAFETY;
+
   let kind = 'card';
   const r = Math.random();
   if (r < 0.06 + t*0.012) kind = 'spring';
   else if (r < 0.20 + t*0.045) kind = 'crumble';
   else if (r < 0.38 + t*0.055) kind = 'move';
+
+  // a moving platform keeps drifting after it's placed, before the player gets there —
+  // reserve half the reach budget for that drift and cap its speed so it can never
+  // wander further than the remaining budget allows, however tight the gap is
+  let moveVx = 0, driftBudget = 0;
+  if (kind === 'move'){
+    const raw = rnd(.7,1.5) * (Math.random()<.5?-1:1) * (1 + t*.14);
+    const maxVx = (reach * 0.5) / Math.max(1, jr.frames);
+    moveVx = Math.sign(raw) * Math.min(Math.abs(raw), maxVx);
+    driftBudget = Math.abs(moveVx) * jr.frames;
+  }
+  const usable = Math.max(1, reach - driftBudget);
+
+  const loBound = 10 + w/2, hiBound = W - 10 - w/2;
+  const lo = Math.max(loBound, G.lastX - usable);
+  const hi = Math.min(hiBound, G.lastX + usable);
+  const centerX = lo <= hi ? rnd(lo, hi) : Math.max(loBound, Math.min(hiBound, G.lastX));
+  const x = centerX - w/2;
+
   const list = TIERS[t].chores;
   G.plats.push({
     x, y, w, h:16, kind,
     text: list[(Math.random()*list.length)|0],
     done:false, gone:false, dead:0,
-    vx: kind === 'move' ? rnd(.7,1.5) * (Math.random()<.5?-1:1) * (1 + t*.14) : 0,
+    vx: moveVx,
     tilt: (Math.random()-.5) * 0.06
   });
+
+  G.lastY = y; G.lastX = centerX; G.lastVy = (kind === 'spring') ? -21 : -12.6;
 
   // hazards & goodies ride between the rungs
   if (Math.random() < 0.05 + t*0.045 && y < G.startY - 400){
@@ -418,6 +461,7 @@ function reset(){
   G.plats.push({ x:W/2-70, y:H-100, w:140, h:16, kind:'card', text:'Get out of bed',
                  done:false, gone:false, dead:0, vx:0, tilt:0 });
   G.topY = H - 100;
+  G.lastY = H - 100; G.lastX = W/2; G.lastVy = -12.6;
   while (G.topY > G.cam - H) { G.topY -= rnd(66, 104); addPlatform(G.topY); }
   drawPips();
 }
