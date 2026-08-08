@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#08161A">
+<title>Tritave — Bohlen-Pierce Sequencer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ground:#08161A;
+    --panel:#0F252B;
+    --line:#1C3A41;
+    --ink:#DDECEA;
+    --muted:#6B8E90;
+    --lambda:#37E0B0;
+    --chromatic:#B983FF;
+    --beam:#FFD166;
+    --cell-h: 1;
+    --display:'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+    --mono:'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; margin:0; overflow:hidden; overscroll-behavior:none;}
+  body{
+    background:var(--ground); color:var(--ink);
+    font-family:var(--mono);
+    display:flex; flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    user-select:none; -webkit-user-select:none;
+  }
+
+  /* ---------- header ---------- */
+  header{padding:10px 14px 8px; flex:0 0 auto;}
+  .eyebrow{
+    font-size:9.5px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--muted); display:flex; gap:10px; align-items:baseline;
+  }
+  .eyebrow b{color:var(--lambda); font-weight:500;}
+  h1{
+    font-family:var(--display); font-weight:800; font-size:23px;
+    letter-spacing:-.02em; margin:3px 0 0; line-height:1;
+  }
+  h1 span{color:var(--muted); font-weight:500;}
+
+  /* ---------- grid ---------- */
+  #grid{
+    flex:1 1 auto; min-height:0;
+    display:flex; flex-direction:column;
+    padding:6px 12px 4px;
+    touch-action:none;
+  }
+  .row{display:flex; align-items:stretch; flex:1 1 0; min-height:0;}
+  .row.tritave-top .label .name{color:var(--beam);}
+  .label{
+    flex:0 0 54px; padding-right:8px;
+    display:flex; flex-direction:column; justify-content:center; align-items:flex-end;
+    line-height:1;
+  }
+  .label .name{font-family:var(--display); font-weight:800; font-size:15px; letter-spacing:-.01em;}
+  .label .cents{font-size:8.5px; color:var(--muted); margin-top:2px; letter-spacing:.02em;}
+  .row.off .label .name{color:var(--chromatic); opacity:.75;}
+  .cells{flex:1 1 auto; display:flex; gap:3px; min-width:0;}
+  .cell{
+    flex:1 1 0; min-width:0;
+    border:1px solid var(--line); border-radius:3px;
+    background:transparent;
+    transition:background-color .09s linear, box-shadow .09s linear, transform .09s ease;
+  }
+  .cell.on{background:var(--lambda); border-color:var(--lambda);}
+  .row.off .cell.on{background:var(--chromatic); border-color:var(--chromatic);}
+  .cell.beam{border-color:rgba(255,209,102,.55);}
+  .cell.beam:not(.on){background:rgba(255,209,102,.09);}
+  .cell.fire{transform:scaleY(1.14); box-shadow:0 0 14px 2px rgba(55,224,176,.55);}
+  .row.off .cell.fire{box-shadow:0 0 14px 2px rgba(185,131,255,.55);}
+  .tritave-rule{flex:0 0 1px; background:var(--line); margin:5px 0 5px 54px;}
+
+  /* ---------- transport ---------- */
+  footer{
+    flex:0 0 auto; border-top:1px solid var(--line); background:var(--panel);
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+  }
+  .transport{display:flex; align-items:center; gap:12px;}
+  #play{
+    flex:0 0 52px; height:52px; border-radius:50%;
+    border:1.5px solid var(--lambda); background:transparent; color:var(--lambda);
+    font-family:var(--display); font-size:17px; font-weight:800;
+    display:grid; place-items:center; transition:background-color .12s, color .12s;
+  }
+  #play.playing{background:var(--lambda); color:var(--ground);}
+  #play:active{transform:scale(.95);}
+  .tempo{flex:1 1 auto; min-width:0;}
+  .tempo .cap{
+    display:flex; justify-content:space-between; font-size:9.5px;
+    letter-spacing:.16em; text-transform:uppercase; color:var(--muted); margin-bottom:3px;
+  }
+  .tempo .cap b{color:var(--ink); font-weight:500; letter-spacing:.04em;}
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:22px; background:transparent; margin:0;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:2px; background:var(--line);}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:20px; height:20px; margin-top:-9px;
+    border-radius:50%; background:var(--ink);
+  }
+  .more{
+    flex:0 0 auto; background:transparent; border:1px solid var(--line); color:var(--muted);
+    border-radius:20px; padding:9px 13px; font-family:var(--mono); font-size:10px;
+    letter-spacing:.16em; text-transform:uppercase;
+  }
+  .more.open{color:var(--ink); border-color:var(--ink);}
+
+  /* ---------- setup panel ---------- */
+  #setup{display:none; padding-top:12px;}
+  #setup.open{display:block;}
+  .field{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:7px 0;}
+  .field > span{
+    font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted);
+    flex:0 0 auto;
+  }
+  .seg{display:flex; gap:5px;}
+  .seg button{
+    background:transparent; border:1px solid var(--line); color:var(--muted);
+    border-radius:14px; padding:7px 11px; font-family:var(--mono); font-size:11px;
+  }
+  .seg button[aria-pressed="true"]{border-color:var(--lambda); color:var(--lambda);}
+  .stepper{display:flex; align-items:center; gap:10px;}
+  .stepper button{
+    width:34px; height:30px; border-radius:8px; background:transparent;
+    border:1px solid var(--line); color:var(--ink); font-size:15px; line-height:1;
+  }
+  .stepper output{font-size:12px; min-width:66px; text-align:center;}
+  .stepper output small{color:var(--muted); font-size:9px;}
+  .note{font-size:9.5px; color:var(--muted); line-height:1.5; padding-top:6px; border-top:1px solid var(--line); margin-top:8px;}
+
+  @media (prefers-reduced-motion: reduce){
+    .cell{transition:none;} .cell.fire{transform:none;}
+  }
+  @media (max-height:640px){
+    h1{font-size:19px;} header{padding-top:6px;}
+    #play{flex-basis:46px; height:46px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow"><span>13 equal divisions of 3:1</span><b id="modeTag">λ mode</b></div>
+  <h1>Tritave <span>/ BP sequencer</span></h1>
+</header>
+
+<div id="grid"></div>
+
+<footer>
+  <div class="transport">
+    <button id="play" aria-label="Play">▶</button>
+    <div class="tempo">
+      <div class="cap"><span>Tempo</span><b><span id="bpmOut">108</span> bpm</b></div>
+      <input id="bpm" type="range" min="40" max="220" value="108" step="1" aria-label="Tempo">
+    </div>
+    <button class="more" id="moreBtn">Tune</button>
+  </div>
+
+  <div id="setup">
+    <div class="field">
+      <span>Scale</span>
+      <div class="seg" id="modeSeg">
+        <button data-mode="lambda" aria-pressed="true">Lambda</button>
+        <button data-mode="chromatic" aria-pressed="false">All 13</button>
+      </div>
+    </div>
+    <div class="field">
+      <span>Steps</span>
+      <div class="seg" id="stepSeg">
+        <button data-steps="8" aria-pressed="false">8</button>
+        <button data-steps="13" aria-pressed="true">13</button>
+        <button data-steps="16" aria-pressed="false">16</button>
+      </div>
+    </div>
+    <div class="field">
+      <span>Tone</span>
+      <div class="seg" id="toneSeg">
+        <button data-tone="sine" aria-pressed="true">Sine</button>
+        <button data-tone="odd" aria-pressed="false">Odd 1·3·5·7</button>
+      </div>
+    </div>
+    <div class="field">
+      <span>Root</span>
+      <div class="stepper">
+        <button id="fDown" aria-label="Root down a tritave">÷3</button>
+        <output id="fOut">220.0 <small>Hz</small></output>
+        <button id="fUp" aria-label="Root up a tritave">×3</button>
+      </div>
+    </div>
+    <div class="field">
+      <span>Pattern</span>
+      <div class="seg">
+        <button id="randBtn">Seed</button>
+        <button id="clearBtn">Clear</button>
+      </div>
+    </div>
+    <p class="note">Row spacing shows the mode's step sizes. Each step is 146.3 cents; the top C′ closes the tritave at 1901.96 cents.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- scale ---------------- */
+  var STEP_CENTS = 1200 * Math.log(3) / Math.log(2) / 13;   // 146.304
+  var NAMES = ['C','D♭','D','E','F','G♭','G','H','J♭','J','A','B♭','B','C′'];
+  var LAMBDA = [0,1,3,4,6,7,9,10,13];
+  var CHROMATIC = [0,1,2,3,4,5,6,7,8,9,10,11,12,13];
+  var IN_LAMBDA = {};
+  LAMBDA.forEach(function(d){ IN_LAMBDA[d] = true; });
+
+  function freqOf(deg){ return root * Math.pow(3, deg / 13); }
+
+  /* ---------------- state ---------------- */
+  var mode = 'lambda', steps = 13, tone = 'sine', root = 220;
+  var bpm = 108, playing = false, currentStep = 0;
+  var pattern = {};                    // "deg:step" -> true
+  var cellEls = [];                    // [rowIndex][step]
+  var rowDegrees = [];
+
+  var gridEl = document.getElementById('grid');
+
+  /* ---------------- audio ---------------- */
+  var ac = null, master = null, oddWave = null;
+  function audio(){
+    if (ac) return ac;
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    ac = new Ctx();
+    master = ac.createGain(); master.gain.value = 0.85;
+    var comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -12; comp.ratio.value = 6;
+    master.connect(comp); comp.connect(ac.destination);
+    var real = new Float32Array(8), imag = new Float32Array(8);
+    [1,3,5,7].forEach(function(h){ imag[h] = 1 / h; });
+    oddWave = ac.createPeriodicWave(real, imag, {disableNormalization:false});
+    return ac;
+  }
+  function unlock(){ audio(); if (ac.state === 'suspended') ac.resume(); }
+
+  function strike(freq, at, dur){
+    audio();
+    var o = ac.createOscillator();
+    if (tone === 'odd') o.setPeriodicWave(oddWave); else o.type = 'sine';
+    o.frequency.setValueAtTime(freq, at);
+    var g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.linearRampToValueAtTime(0.17, at + 0.008);
+    g.gain.setTargetAtTime(0.0001, at + Math.max(0.04, dur * 0.55), 0.055);
+    o.connect(g); g.connect(master);
+    o.start(at); o.stop(at + dur + 0.5);
+  }
+
+  /* ---------------- grid build ---------------- */
+  function gapPx(interval){ return (interval - 1) * 7; }
+
+  function buildGrid(){
+    var degrees = (mode === 'lambda' ? LAMBDA : CHROMATIC).slice();
+    rowDegrees = degrees.slice().reverse();          // high to low
+    gridEl.innerHTML = '';
+    cellEls = [];
+
+    rowDegrees.forEach(function(deg, r){
+      var row = document.createElement('div');
+      row.className = 'row' + (IN_LAMBDA[deg] ? '' : ' off') + (deg === 13 ? ' tritave-top' : '');
+      var below = rowDegrees[r + 1];
+      if (below !== undefined) row.style.marginBottom = gapPx(deg - below) + 'px';
+
+      var label = document.createElement('div');
+      label.className = 'label';
+      label.innerHTML = '<div class="name">' + NAMES[deg] + '</div>' +
+                        '<div class="cents">' + Math.round(deg * STEP_CENTS) + '¢</div>';
+      row.appendChild(label);
+
+      var cells = document.createElement('div');
+      cells.className = 'cells';
+      var rowCells = [];
+      for (var s = 0; s < steps; s++){
+        var c = document.createElement('div');
+        c.className = 'cell' + (pattern[deg + ':' + s] ? ' on' : '');
+        c.dataset.deg = deg; c.dataset.step = s;
+        cells.appendChild(c);
+        rowCells.push(c);
+      }
+      row.appendChild(cells);
+      cellEls.push(rowCells);
+      gridEl.appendChild(row);
+
+      if (deg === 13){
+        var rule = document.createElement('div');
+        rule.className = 'tritave-rule';
+        gridEl.appendChild(rule);
+      }
+    });
+    document.getElementById('modeTag').textContent = mode === 'lambda' ? 'λ mode' : 'chromatic';
+  }
+
+  /* ---------------- painting ---------------- */
+  var painting = false, paintTo = true;
+
+  function cellAt(x, y){
+    var el = document.elementFromPoint(x, y);
+    return (el && el.classList.contains('cell')) ? el : null;
+  }
+  function apply(el){
+    if (!el) return;
+    var key = el.dataset.deg + ':' + el.dataset.step;
+    if (!!pattern[key] === paintTo) return;
+    if (paintTo){ pattern[key] = true; el.classList.add('on'); }
+    else { delete pattern[key]; el.classList.remove('on'); }
+    if (paintTo && !playing) strike(freqOf(+el.dataset.deg), audio().currentTime + 0.01, 0.35);
+  }
+
+  gridEl.addEventListener('pointerdown', function(e){
+    var el = cellAt(e.clientX, e.clientY);
+    if (!el) return;
+    unlock();
+    painting = true;
+    paintTo = !pattern[el.dataset.deg + ':' + el.dataset.step];
+    apply(el);
+    e.preventDefault();
+  });
+  gridEl.addEventListener('pointermove', function(e){
+    if (!painting) return;
+    apply(cellAt(e.clientX, e.clientY));
+    e.preventDefault();
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(function(t){
+    window.addEventListener(t, function(){ painting = false; });
+  });
+
+  /* ---------------- scheduler ---------------- */
+  var nextStepTime = 0, schedulerId = null, queue = [];
+  var LOOKAHEAD = 25, AHEAD = 0.12;
+
+  function stepDur(){ return 60 / bpm / 4; }   // steps are sixteenths
+
+  function scheduleStep(step, time){
+    var dur = stepDur();
+    rowDegrees.forEach(function(deg){
+      if (pattern[deg + ':' + step]) strike(freqOf(deg), time, dur * 0.9);
+    });
+    queue.push({step: step, time: time});
+  }
+
+  function tick(){
+    while (nextStepTime < ac.currentTime + AHEAD){
+      scheduleStep(currentStep, nextStepTime);
+      nextStepTime += stepDur();
+      currentStep = (currentStep + 1) % steps;
+    }
+  }
+
+  var drawn = -1;
+  function draw(){
+    if (ac){
+      while (queue.length && queue[0].time <= ac.currentTime){
+        drawn = queue.shift().step;
+        paint(drawn);
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  function paint(step){
+    for (var r = 0; r < cellEls.length; r++){
+      var rowCells = cellEls[r];
+      for (var s = 0; s < rowCells.length; s++){
+        var c = rowCells[s];
+        c.classList.toggle('beam', s === step);
+        if (s === step && c.classList.contains('on')){
+          c.classList.add('fire');
+          (function(el){ setTimeout(function(){ el.classList.remove('fire'); }, 110); })(c);
+        }
+      }
+    }
+  }
+  function clearBeam(){
+    cellEls.forEach(function(row){ row.forEach(function(c){ c.classList.remove('beam','fire'); }); });
+  }
+  requestAnimationFrame(draw);
+
+  /* ---------------- transport ---------------- */
+  var playBtn = document.getElementById('play');
+  function start(){
+    unlock();
+    playing = true; currentStep = 0; queue = [];
+    nextStepTime = ac.currentTime + 0.06;
+    schedulerId = setInterval(tick, LOOKAHEAD);
+    playBtn.textContent = '■'; playBtn.classList.add('playing');
+    playBtn.setAttribute('aria-label','Stop');
+  }
+  function stop(){
+    playing = false;
+    clearInterval(schedulerId); schedulerId = null; queue = [];
+    playBtn.textContent = '▶'; playBtn.classList.remove('playing');
+    playBtn.setAttribute('aria-label','Play');
+    clearBeam();
+  }
+  playBtn.addEventListener('click', function(){ playing ? stop() : start(); });
+
+  var bpmIn = document.getElementById('bpm'), bpmOut = document.getElementById('bpmOut');
+  bpmIn.addEventListener('input', function(){ bpm = +bpmIn.value; bpmOut.textContent = bpm; });
+
+  /* ---------------- setup panel ---------------- */
+  var moreBtn = document.getElementById('moreBtn'), setup = document.getElementById('setup');
+  moreBtn.addEventListener('click', function(){
+    setup.classList.toggle('open'); moreBtn.classList.toggle('open');
+  });
+
+  function segment(id, fn){
+    document.getElementById(id).addEventListener('click', function(e){
+      var b = e.target.closest('button'); if (!b) return;
+      [].forEach.call(this.querySelectorAll('button'), function(x){
+        x.setAttribute('aria-pressed', String(x === b));
+      });
+      fn(b);
+    });
+  }
+  segment('modeSeg', function(b){ mode = b.dataset.mode; buildGrid(); });
+  segment('stepSeg', function(b){
+    steps = +b.dataset.steps;
+    Object.keys(pattern).forEach(function(k){
+      if (+k.split(':')[1] >= steps) delete pattern[k];
+    });
+    currentStep = 0; buildGrid();
+  });
+  segment('toneSeg', function(b){ tone = b.dataset.tone; });
+
+  var fOut = document.getElementById('fOut');
+  function showRoot(){ fOut.innerHTML = root.toFixed(1) + ' <small>Hz</small>'; }
+  document.getElementById('fUp').addEventListener('click', function(){
+    if (root * 3 <= 1200){ root *= 3; showRoot(); }
+  });
+  document.getElementById('fDown').addEventListener('click', function(){
+    if (root / 3 >= 40){ root /= 3; showRoot(); }
+  });
+  showRoot();
+
+  document.getElementById('clearBtn').addEventListener('click', function(){
+    pattern = {}; buildGrid();
+  });
+  document.getElementById('randBtn').addEventListener('click', function(){
+    pattern = {};
+    var degrees = mode === 'lambda' ? LAMBDA : CHROMATIC;
+    for (var s = 0; s < steps; s++){
+      if (Math.random() < 0.55){
+        var d = degrees[Math.floor(Math.random() * degrees.length)];
+        pattern[d + ':' + s] = true;
+      }
+    }
+    buildGrid();
+  });
+
+  document.addEventListener('touchstart', unlock, {once:true, passive:true});
+  document.addEventListener('gesturestart', function(e){ e.preventDefault(); });
+
+  buildGrid();
+})();
+</script>
+</body>
+</html>
