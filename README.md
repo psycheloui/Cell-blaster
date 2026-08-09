@@ -1,7 +1,7 @@
 # Cell-blaster
 Shooter game about surviving chemotherapy 
 
-# Chore-climb
+# Office-hop
 The same while clearing a neverending to-do list with increasing levels of ridiculousness 
 
 # BP-sequencer
