@@ -40,10 +40,18 @@
   }
   .alt{font-family:"Fraunces",Georgia,serif;font-weight:900;font-size:36px;line-height:.9;}
   .alt span{font-family:"Space Mono";font-size:13px;font-weight:400;opacity:.6;}
+  .alt.coin{font-size:28px;color:#C98A12;}
   .lbl{opacity:.6;text-transform:uppercase;font-size:11px;letter-spacing:.13em;margin-bottom:3px;}
   #anc{display:flex;gap:6px;justify-content:flex-end;margin-top:5px;}
   .pip{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--ink);background:var(--ink);}
   .pip.out{background:transparent;opacity:.3;}
+  #pause{
+    pointer-events:auto;border:2px solid var(--ink);background:var(--card);
+    color:var(--ink);font-family:"Space Mono";font-weight:700;font-size:12px;
+    letter-spacing:.08em;padding:7px 12px;border-radius:3px;cursor:pointer;
+    box-shadow:2px 2px 0 var(--ink);
+  }
+  #pause:active{transform:translate(2px,2px);box-shadow:none;}
   #tiltrow{display:flex;gap:6px;justify-content:flex-end;margin-top:9px;}
   #mute,#retilt{
     pointer-events:auto;border:1.5px solid var(--ink);background:transparent;
@@ -123,9 +131,12 @@
   <div>
     <div class="lbl">Altitude</div>
     <div class="alt" id="altv">0<span> m</span></div>
+    <div class="lbl" style="margin-top:9px">Grant funding</div>
+    <div class="alt coin" id="coinv">$0</div>
   </div>
   <div style="text-align:right">
-    <div class="lbl">Neutrophils</div>
+    <button id="pause">⏸ PAUSE</button>
+    <div class="lbl" style="margin-top:10px">Neutrophils</div>
     <div id="anc"></div>
     <div id="tiltrow">
       <button id="mute">SOUND ON</button>
@@ -157,6 +168,8 @@
     <div class="legend">
       <b>◉</b> cancer cell — stomp it from above, shoot it, or lose a neutrophil<br>
       👆 tap anywhere — fire toward that spot, pops one cell<br>
+      <b>$</b> grant funding — grab every coin you can<br>
+      pink-edged rungs are the political ones. they wobble.<br>
       ☕ espresso — one enormous launch<br>
       🧤 cold gloves — 8 seconds of nothing touching you<br>
       💧 infusion — clears the screen<br>
@@ -170,6 +183,19 @@
   </div>
 </div>
 
+<div class="sheet hide" id="paused">
+  <div class="card">
+    <h1>Paused.</h1>
+    <div class="sub">The to-do list will wait. It's very good at that.</div>
+    <div class="stats">
+      <div class="stat"><div class="n" id="p1">0</div><div class="l">Meters climbed</div></div>
+      <div class="stat"><div class="n" id="p2">0</div><div class="l">Grant funding</div></div>
+    </div>
+    <div class="rule"></div>
+    <button class="big" id="resume">Resume</button>
+  </div>
+</div>
+
 <div class="sheet hide" id="over">
   <div class="card">
     <h1 id="overtitle">Nadir.</h1>
@@ -178,6 +204,7 @@
       <div class="stat"><div class="n" id="s1">0</div><div class="l">Meters climbed</div></div>
       <div class="stat"><div class="n" id="s2">0</div><div class="l">Chores stamped</div></div>
       <div class="stat"><div class="n" id="s3">0</div><div class="l">Cells stomped</div></div>
+      <div class="stat"><div class="n" id="s5">0</div><div class="l">Grant funding</div></div>
       <div class="stat"><div class="n" id="s4">0</div><div class="l">Personal best</div></div>
     </div>
     <div class="rule"></div>
@@ -231,8 +258,22 @@ const TIERS = [
   { at:2200, key:'Chapter six', name:'Legend', chores:[
     'Be named honorary weather','The mandolin plays you now','Grant reviews itself out of respect',
     'Cancer sends a formal apology','Time takes a sabbatical','Your inbox reaches zero. Briefly.',
-    'The owls hug you back','Somebody else water the plant' ]}
+    'The owls hug you back','Somebody else water the plant' ]},
+  { at:3200, key:'Chapter seven', name:'Emerita', chores:[
+    'Decline an award politely','Decline it again, firmly','Name a building after the plant',
+    'Hand the org chart to a sea otter','Endow a chair made of actual chair',
+    'Delegate the delegating','Be quoted in your own festschrift','Retire. Reconsider. Retire.' ]}
 ];
+
+// Chores where the difficulty is people, not workload — these rungs wobble underfoot.
+const TRICKY = new Set([
+  'Say no to a committee','Read the reviewer 2 email','Mediate an authorship dispute',
+  'Chair a meeting about meetings','Approve a budget you cannot see','Merge two strategic plans',
+  'Restructure the org chart','Restructure it back','Sit on one more search committee',
+  'Draft a memo about the memo','Attend a retreat about synergy','Explain p-values to a provost',
+  'Chair the search for your own clone','Advise a student who is also a wig',
+  'Decline an award politely','Decline it again, firmly','Delegate the delegating'
+]);
 const OVERLINES = [
   'Rest counts as progress. Bounce again.',
   'The to-do list is infinite. You are not obligated to finish it today.',
@@ -247,8 +288,9 @@ const G = {
   cam:0, startY:0, alt:0, best:0,
   chores:0, kills:0, anc:3, inv:0, shield:0,
   head:'buckethat', tier:0, note:0,
-  plats:[], cells:[], ups:[], fx:[], bullets:[],
-  topY:0, shake:0, lastX:0, lastY:0, lastVy:-12.6
+  plats:[], cells:[], ups:[], fx:[], bullets:[], coinsOn:[],
+  topY:0, shake:0, lastX:0, lastY:0, lastVy:-12.6,
+  coins:0, paused:false
 };
 const P = { x:0, y:0, vx:0, vy:0, r:15, face:1 };
 
@@ -305,7 +347,7 @@ cv.addEventListener('pointercancel', () => { dragX = null; dragTilt = 0; });
 
 let tapX = 0, tapY = 0, tapT = 0, tapMoved = false, lastShot = 0;
 function shoot(tx, ty){
-  if (!G.running) return;
+  if (!G.running || G.paused) return;
   const now = performance.now();
   if (now - lastShot < 55) return;
   lastShot = now;
@@ -413,22 +455,41 @@ function jumpReach(gap, vy0){
   }
   return { xUp: xUp === null ? 0 : xUp, xDown: xUp === null ? 0 : x, framesUp, framesDown: 600 };
 }
-const REACH_SAFETY = 0.72;   // leaves margin for reaction time / imperfect tilt input
-const MIN_SPREAD   = 0.34;   // floor on how far sideways each rung sits, so they don't hug the centre
+const REACH_SAFETY = 0.44;   // generous margin — real players can't hold perfect tilt the whole arc
+const MIN_SPREAD   = 0.16;   // floor on how far sideways each rung sits, so they don't hug the centre
+const WOBBLE_AMP   = 11;     // sideways sway of a politically tricky rung
 
 // The player moves in slow motion through the opening chapters so the chores are readable,
 // easing up to full speed by Dean Hours. Because this scales time (not distance), every
 // jump arc keeps exactly the same shape — so reachability is unaffected.
-const SPEED_STEPS = [0.62, 0.74, 0.86, 0.94, 1, 1];
+const SPEED_STEPS = [0.62, 0.74, 0.86, 0.94, 1, 1, 1];
 const speedFor = t => SPEED_STEPS[Math.min(t, SPEED_STEPS.length - 1)];
+
+// Chapters 3, 5 and 7 (0-indexed 2, 4, 6): the whole board rearranges after every hop.
+const SHUFFLE_TIERS = new Set([2, 4, 6]);
+
+const gapFor = t => rnd(54, 82 - Math.min(t, 6) * 2);
+
+// Chooses an x for a rung that a jump from (prevX, prevY) at prevVy can actually reach,
+// biased away from directly-overhead so the climb zig-zags. `extra` is sideways movement
+// the rung will do on its own (drift or wobble), reserved out of the budget up front.
+function placeX(prevX, prevY, y, prevVy, w, extra){
+  const gap = prevY - y;
+  const jr = jumpReach(gap, prevVy);
+  const reach = jr.xDown * REACH_SAFETY;
+  const usable = Math.max(1, reach - (extra || 0));
+  const loBound = 10 + w/2, hiBound = W - 10 - w/2;
+  let dir = Math.random() < 0.5 ? -1 : 1;
+  if (prevX - usable < loBound && prevX + usable <= hiBound) dir = 1;
+  else if (prevX + usable > hiBound && prevX - usable >= loBound) dir = -1;
+  let cx = prevX + dir * rnd(MIN_SPREAD, 1) * usable;
+  if (cx < loBound || cx > hiBound) cx = prevX - dir * rnd(MIN_SPREAD, 1) * usable;
+  return { cx: Math.max(loBound, Math.min(hiBound, cx)), jr };
+}
 
 function addPlatform(y){
   const t = G.tier;
   const w = 118;
-
-  const gap = G.lastY - y;
-  const jr = jumpReach(gap, G.lastVy);
-  const reach = jr.xDown * REACH_SAFETY;
 
   let kind = 'card';
   const r = Math.random();
@@ -436,40 +497,35 @@ function addPlatform(y){
   else if (r < 0.20 + t*0.045) kind = 'crumble';
   else if (r < 0.38 + t*0.055) kind = 'move';
 
-  // a moving platform keeps drifting after it's placed, before the player gets there —
-  // reserve part of the reach budget for that drift and cap its speed so it can never
-  // wander further than the remaining budget allows, however tight the gap is
-  let moveVx = 0, driftBudget = 0;
+  const list = TIERS[t].chores;
+  const text = list[(Math.random()*list.length)|0];
+  // politically tricky chores never sit still
+  const wob = (TRICKY.has(text) && kind !== 'move') ? WOBBLE_AMP : 0;
+
+  // a moving rung keeps drifting after it's placed, before the player gets there — reserve
+  // part of the reach budget for that and cap its speed so it can't wander out of range
+  const probe = jumpReach(G.lastY - y, G.lastVy);
+  const budget = probe.xDown * REACH_SAFETY;
+  let moveVx = 0, extra = wob;
   if (kind === 'move'){
     const raw = rnd(.7,1.5) * (Math.random()<.5?-1:1) * (1 + t*.14);
-    const maxVx = (reach * 0.26) / Math.max(1, jr.framesDown);
+    const maxVx = (budget * 0.26) / Math.max(1, probe.framesDown);
     moveVx = Math.sign(raw) * Math.min(Math.abs(raw), maxVx);
-    driftBudget = Math.abs(moveVx) * jr.framesDown;
+    extra += Math.abs(moveVx) * probe.framesDown;
   }
-  const usable = Math.max(1, reach - driftBudget);
 
-  const loBound = 10 + w/2, hiBound = W - 10 - w/2;
-  // bias each rung away from directly-overhead so the climb genuinely zig-zags across the screen
-  let dir = Math.random() < 0.5 ? -1 : 1;
-  if (G.lastX - usable < loBound && G.lastX + usable <= hiBound) dir = 1;
-  else if (G.lastX + usable > hiBound && G.lastX - usable >= loBound) dir = -1;
-  let centerX = G.lastX + dir * rnd(MIN_SPREAD, 1) * usable;
-  if (centerX < loBound || centerX > hiBound){
-    centerX = G.lastX - dir * rnd(MIN_SPREAD, 1) * usable;   // bounce off the wall instead of clamping to it
-  }
-  centerX = Math.max(loBound, Math.min(hiBound, centerX));
-  const x = centerX - w/2;
+  const { cx } = placeX(G.lastX, G.lastY, y, G.lastVy, w, extra);
+  const x = cx - w/2;
 
-  const list = TIERS[t].chores;
   G.plats.push({
-    x, y, w, h:16, kind,
-    text: list[(Math.random()*list.length)|0],
+    x, baseX:x, targetX:null, y, w, h:16, kind, text,
     done:false, gone:false, dead:0,
     vx: moveVx,
+    wob, wobPh: Math.random()*6.3,
     tilt: (Math.random()-.5) * 0.06
   });
 
-  G.lastY = y; G.lastX = centerX; G.lastVy = (kind === 'spring') ? -21 : -12.6;
+  G.lastY = y; G.lastX = cx; G.lastVy = (kind === 'spring') ? -21 : -12.6;
 
   // hazards & goodies ride between the rungs
   if (Math.random() < 0.05 + t*0.045 && y < G.startY - 400){
@@ -480,20 +536,43 @@ function addPlatform(y){
     const kinds = ['coffee','glove','iv'];
     G.ups.push({ x: rnd(24, W-24), y: y - 34, k: kinds[(Math.random()*3)|0], bob: Math.random()*6.3 });
   }
+  // grant funding — sits on the jump path above the rung, so it rewards a well-aimed hop
+  if (Math.random() < 0.16){
+    G.coinsOn.push({ x: cx + rnd(-34, 34), y: y - rnd(26, 46), bob: Math.random()*6.3, spin: Math.random()*6.3 });
+  }
+}
+
+// Chapters 3, 5 and 7: after every stamped chore the board rearranges. Each rung above the
+// player is re-placed in order, chained off the one below it, so the new layout is still climbable.
+function reshuffleAbove(){
+  const above = G.plats
+    .filter(p => !p.gone && p.y < P.y - 24)
+    .sort((a,b) => b.y - a.y);
+  let prevX = P.x, prevY = P.y, prevVy = -12.6;
+  for (const p of above){
+    if (prevY - p.y <= 0) continue;
+    const extra = (p.wob || 0) + (p.vx ? Math.abs(p.vx) * jumpReach(prevY - p.y, prevVy).framesDown : 0);
+    const { cx } = placeX(prevX, prevY, p.y, prevVy, p.w, extra);
+    p.targetX = cx - p.w/2;          // slides into place rather than teleporting
+    prevX = cx; prevY = p.y; prevVy = (p.kind === 'spring') ? -21 : -12.6;
+  }
+  G.lastX = prevX; G.lastY = prevY; G.lastVy = prevVy;
 }
 
 function reset(){
-  G.plats.length = 0; G.cells.length = 0; G.ups.length = 0; G.fx.length = 0; G.bullets.length = 0;
+  G.plats.length = 0; G.cells.length = 0; G.ups.length = 0; G.fx.length = 0;
+  G.bullets.length = 0; G.coinsOn.length = 0;
   G.chores = 0; G.kills = 0; G.anc = 3; G.inv = 0; G.shield = 0;
   G.tier = 0; G.note = 0; G.alt = 0; G.shake = 0; G.t = 0;
+  G.coins = 0; G.paused = false;
   P.x = W/2; P.y = H - 140; P.vx = 0; P.vy = -12; P.face = 1;
   G.startY = P.y; G.cam = P.y - H*0.6;
-  G.plats.push({ x:W/2-70, y:H-100, w:140, h:16, kind:'card', text:'Get out of bed',
-                 done:false, gone:false, dead:0, vx:0, tilt:0 });
+  G.plats.push({ x:W/2-70, baseX:W/2-70, targetX:null, y:H-100, w:140, h:16, kind:'card',
+                 text:'Get out of bed', done:false, gone:false, dead:0, vx:0, wob:0, wobPh:0, tilt:0 });
   G.topY = H - 100;
   G.lastY = H - 100; G.lastX = W/2; G.lastVy = -12.6;
-  while (G.topY > G.cam - H) { G.topY -= rnd(66, 104); addPlatform(G.topY); }
-  drawPips();
+  while (G.topY > G.cam - H) { G.topY -= gapFor(0); addPlatform(G.topY); }
+  drawPips(); drawCoins();
 }
 
 /* ============================ effects ============================ */
@@ -520,6 +599,28 @@ function banner(k, t){
   bEl.classList.add('on');
   setTimeout(() => bEl.classList.remove('on'), 1900);
 }
+function drawCoins(){
+  document.getElementById('coinv').textContent = '$' + G.coins;
+}
+
+function setPaused(on){
+  if (!G.running) return;
+  G.paused = on;
+  const sheet = document.getElementById('paused');
+  if (on){
+    document.getElementById('p1').textContent = G.alt;
+    document.getElementById('p2').textContent = '$' + G.coins;
+    sheet.classList.remove('hide');
+    document.getElementById('pause').textContent = '▶ RESUME';
+  } else {
+    sheet.classList.add('hide');
+    document.getElementById('pause').textContent = '⏸ PAUSE';
+    last = 0;                       // drop the frame gap accrued while paused
+  }
+}
+document.getElementById('pause').onclick = () => setPaused(!G.paused);
+document.getElementById('resume').onclick = () => setPaused(false);
+
 function drawPips(){
   const el = document.getElementById('anc');
   el.innerHTML = '';
@@ -566,7 +667,7 @@ function update(dt){
   }
 
   // generate ahead, cull behind
-  while (G.topY > G.cam - H*0.6){ G.topY -= rnd(66, 104 - G.tier*3); addPlatform(G.topY); }
+  while (G.topY > G.cam - H*0.6){ G.topY -= gapFor(G.tier); addPlatform(G.topY); }
   const floor = G.cam + H + 120;
   G.plats = G.plats.filter(p => p.y < floor);
   G.cells = G.cells.filter(c => c.y < floor);
@@ -574,10 +675,17 @@ function update(dt){
 
   // platforms
   for (const p of G.plats){
-    if (p.vx){
-      p.x += p.vx * ds;
-      if (p.x < 6 || p.x + p.w > W - 6) p.vx *= -1;
+    if (p.targetX !== null && p.targetX !== undefined){       // gliding to a shuffled position
+      p.baseX += (p.targetX - p.baseX) * Math.min(1, 0.14 * dt);
+      if (Math.abs(p.targetX - p.baseX) < 0.6){ p.baseX = p.targetX; p.targetX = null; }
     }
+    if (p.vx){
+      p.baseX += p.vx * ds;
+      if (p.baseX < 6 || p.baseX + p.w > W - 6) p.vx *= -1;
+    }
+    // politically tricky rungs sway underfoot
+    p.x = p.baseX + (p.wob ? Math.sin(G.t * 0.045 + p.wobPh) * p.wob : 0);
+
     if (p.dead > 0){ p.dead -= dt * 0.05; if (p.dead <= 0) p.gone = true; }
     if (p.gone || P.vy <= 0) continue;
     const feet = P.y + P.r;
@@ -590,8 +698,21 @@ function update(dt){
         burst(P.x, p.y, '#FFC24B', 7, 3);
         if (p.kind === 'crumble') p.dead = 1;
       }
+      if (SHUFFLE_TIERS.has(G.tier)) reshuffleAbove();
     }
   }
+
+  // grant funding
+  for (const co of G.coinsOn){
+    co.bob += 0.07 * ds; co.spin += 0.09 * ds;
+    if (co.got) continue;
+    if (Math.abs(P.x - co.x) < 25 && Math.abs(P.y - co.y) < 26){
+      co.got = 1; G.coins++; drawCoins();
+      burst(co.x, co.y, '#FFC24B', 12, 4);
+      beep(1318, .09, 'triangle', .11); beep(1760, .12, 'triangle', .08);
+    }
+  }
+  G.coinsOn = G.coinsOn.filter(co => !co.got && co.y < floor);
 
   // cancer cells
   for (const c of G.cells){
@@ -702,7 +823,7 @@ function drawCard(p){
   if (y < -40 || y > H + 40) return;
   ctx.save();
   ctx.translate(p.x + p.w/2, y);
-  ctx.rotate(p.tilt);
+  ctx.rotate(p.tilt + (p.wob ? Math.sin(G.t * 0.045 + p.wobPh + 1.1) * 0.075 : 0));
   ctx.globalAlpha = p.dead > 0 ? Math.max(.15, p.dead) : 1;
   const w = p.w, h = p.h;
 
@@ -720,6 +841,11 @@ function drawCard(p){
     ctx.fillStyle = '#2BB3A3';
     ctx.fillRect(-w/2, -h/2, 5, h);
     ctx.strokeRect(-w/2, -h/2, 5, h);
+  }
+  if (p.wob){                       // tricky chore: pink edge, matching the things that wobble
+    ctx.fillStyle = '#FF4D8D';
+    ctx.fillRect(w/2 - 4, -h/2, 4, h);
+    ctx.strokeRect(w/2 - 4, -h/2, 4, h);
   }
   if (p.kind === 'move'){       // paperclip
     ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.4;
@@ -789,6 +915,30 @@ function drawBullet(b){
   ctx.beginPath(); ctx.ellipse(0, 0, 4, 8.5, 0, 0, 6.3); ctx.fill();
   ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.3; ctx.stroke();
   ctx.restore();
+}
+
+function drawCoin(co){
+  const y = co.y - G.cam + Math.sin(co.bob) * 4;
+  if (y < -40 || y > H + 40) return;
+  ctx.save();
+  ctx.translate(co.x, y);
+  const squash = Math.abs(Math.cos(co.spin));       // spins like a tossed coin
+  ctx.scale(Math.max(0.12, squash), 1);
+  ctx.beginPath(); ctx.arc(0, 0, 12, 0, 6.3);
+  ctx.fillStyle = '#FFC24B'; ctx.fill();
+  ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, 6.3);
+  ctx.strokeStyle = 'rgba(27,42,58,.4)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+  // the $ stays upright so it reads at any point in the spin
+  if (squash > 0.45){
+    ctx.save(); ctx.translate(co.x, y);
+    ctx.fillStyle = '#1B2A3A';
+    ctx.font = 'bold 11px "Space Mono", monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('$', 0, 0.5);
+    ctx.restore();
+  }
 }
 
 function drawUp(u){
@@ -878,6 +1028,7 @@ function draw(){
   drawPaper();
   for (const p of G.plats) if (!p.gone) drawCard(p);
   for (const u of G.ups) drawUp(u);
+  for (const co of G.coinsOn) drawCoin(co);
   for (const c of G.cells) drawCell(c);
   for (const b of G.bullets) drawBullet(b);
   for (const f of G.fx){
@@ -896,7 +1047,7 @@ function frame(ts){
   requestAnimationFrame(frame);
   const dt = Math.min(2.6, (ts - last) / 16.667) || 1;
   last = ts;
-  if (G.running) update(dt);
+  if (G.running && !G.paused) update(dt);
   draw();
 }
 requestAnimationFrame(frame);
@@ -921,12 +1072,16 @@ loadBest();
 function end(reason){
   if (!G.running) return;
   G.running = false;
+  G.paused = false;
+  document.getElementById('paused').classList.add('hide');
+  document.getElementById('pause').textContent = '⏸ PAUSE';
   if (G.alt > G.best){ G.best = G.alt; saveBest(); }
   document.getElementById('overtitle').textContent = reason;
   document.getElementById('overline').textContent = OVERLINES[(Math.random()*OVERLINES.length)|0];
   document.getElementById('s1').textContent = G.alt;
   document.getElementById('s2').textContent = G.chores;
   document.getElementById('s3').textContent = G.kills;
+  document.getElementById('s5').textContent = '$' + G.coins;
   document.getElementById('s4').textContent = G.best;
   document.getElementById('over').classList.remove('hide');
   beep(220,.4,'sine',.1);
@@ -945,6 +1100,8 @@ async function start(){
   tiltBase = null; tiltEventSeen = false;
   document.getElementById('start').classList.add('hide');
   document.getElementById('over').classList.add('hide');
+  document.getElementById('paused').classList.add('hide');
+  document.getElementById('pause').textContent = '⏸ PAUSE';
   reset();
   G.running = true;
   banner(TIERS[0].key, TIERS[0].name);
