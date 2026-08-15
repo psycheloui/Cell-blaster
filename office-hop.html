@@ -115,6 +115,29 @@
     font-family:"Space Mono";font-size:12px;color:var(--ink);border-radius:3px;cursor:pointer;
   }
   button.ghost.sel{background:var(--ink);color:var(--card);}
+  .heads{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:12px;}
+  .heads button{
+    padding:9px 4px;border:1.5px solid var(--ink);background:transparent;
+    font-family:"Space Mono";font-size:11px;color:var(--ink);
+    border-radius:3px;cursor:pointer;line-height:1.25;
+  }
+  .heads button.sel{background:var(--ink);color:var(--card);}
+  .heads button.locked{
+    border-style:dashed;opacity:.45;cursor:not-allowed;
+  }
+  .heads button .pr{display:block;font-size:10px;opacity:.75;margin-top:2px;}
+  #walletline{float:right;text-transform:none;letter-spacing:0;color:#C98A12;font-weight:700;}
+  .shoprow{
+    display:flex;align-items:center;gap:8px;margin-bottom:7px;
+  }
+  .shoprow .nm{flex:1;font-size:12.5px;}
+  .shoprow button{
+    border:1.5px solid var(--ink);background:var(--marigold);color:var(--ink);
+    font-family:"Space Mono";font-weight:700;font-size:11px;
+    padding:6px 10px;border-radius:3px;cursor:pointer;white-space:nowrap;
+  }
+  .shoprow button[disabled]{background:transparent;opacity:.4;cursor:not-allowed;}
+  .shoprow.owned .nm{opacity:.55;text-decoration:line-through;}
   .keys{font-size:11px;letter-spacing:.13em;text-transform:uppercase;opacity:.55;margin-bottom:6px;}
   .stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0 4px;}
   .stat .n{font-family:"Fraunces",serif;font-weight:900;font-size:31px;line-height:1;}
@@ -157,18 +180,14 @@
       stamp them done and keep climbing. Tap the screen to fire at the cells above you.
       Pink things want your attention. They cannot have it.
     </div>
-    <div class="keys">Pick your head</div>
-    <div class="row" style="margin-bottom:10px">
-      <button class="ghost sel" data-head="buckethat">Bucket hat</button>
-      <button class="ghost" data-head="bangs">Bangs</button>
-      <button class="ghost" data-head="bare">Bare &amp; glorious</button>
-    </div>
+    <div class="keys">Pick your head <span id="walletline"></span></div>
+    <div class="heads" id="heads"></div>
     <button class="big" id="go">Start climbing</button>
     <div class="rule"></div>
     <div class="legend">
       <b>◉</b> cancer cell — stomp it from above, shoot it, or lose a neutrophil<br>
       👆 tap anywhere — fire toward that spot, pops one cell<br>
-      <b>$</b> grant funding — grab every coin you can<br>
+      <b>$</b> grant funding — grab every coin you can; spend it on wigs after a run<br>
       pink-edged rungs are the political ones. they wobble.<br>
       ☕ espresso — one enormous launch<br>
       🧤 cold gloves — 8 seconds of nothing touching you<br>
@@ -208,6 +227,8 @@
       <div class="stat"><div class="n" id="s4">0</div><div class="l">Personal best</div></div>
     </div>
     <div class="rule"></div>
+    <div class="keys">Wig shop <span id="shopwallet"></span></div>
+    <div id="shop"></div>
     <button class="big" id="again">Go again</button>
   </div>
 </div>
@@ -290,7 +311,7 @@ const G = {
   head:'buckethat', tier:0, note:0,
   plats:[], cells:[], ups:[], fx:[], bullets:[], coinsOn:[],
   topY:0, shake:0, lastX:0, lastY:0, lastVy:-12.6,
-  coins:0, paused:false
+  coins:0, paused:false, wallet:0, owned:new Set()
 };
 const P = { x:0, y:0, vx:0, vy:0, r:15, face:1 };
 
@@ -955,6 +976,41 @@ function drawUp(u){
   ctx.restore();
 }
 
+const WIG_COLORS = {
+  black:   ['#231A26'],
+  pink:    ['#FF4D8D'],
+  rainbow: ['#E5484D','#FF8A3D','#FFC24B','#3FB950','#3B82F6','#A855F7']
+};
+
+// A bob: two side lengths framing the face, plus a cap over the crown. One colour fills
+// it flat; several get painted as vertical bands clipped to the cap, for the rainbow.
+function wigCapPath(){
+  ctx.beginPath();
+  ctx.arc(0, -10, 13, Math.PI*0.97, Math.PI*2.03);
+  ctx.closePath();
+}
+function drawWig(colors){
+  const left = colors[0], right = colors[colors.length - 1];
+  ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.5;
+  // side lengths, drawn first so the cap overlaps their tops
+  ctx.fillStyle = left;
+  ctx.beginPath(); ctx.ellipse(-11.8, -3, 4.1, 8.5, 0, 0, 6.3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = right;
+  ctx.beginPath(); ctx.ellipse(11.8, -3, 4.1, 8.5, 0, 0, 6.3); ctx.fill(); ctx.stroke();
+  // cap
+  ctx.save();
+  wigCapPath();
+  if (colors.length === 1){
+    ctx.fillStyle = colors[0]; ctx.fill();
+  } else {
+    ctx.clip();
+    const bw = 27 / colors.length;
+    colors.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(-13.5 + i*bw, -25, bw + 0.6, 26); });
+  }
+  ctx.restore();
+  wigCapPath(); ctx.stroke();
+}
+
 function drawPlayer(){
   const y = P.y - G.cam;
   ctx.save();
@@ -997,6 +1053,8 @@ function drawPlayer(){
     // hat band
     ctx.beginPath(); ctx.moveTo(-9.5, -10); ctx.lineTo(9.5, -10);
     ctx.strokeStyle = '#1B2A3A'; ctx.lineWidth = 1.1; ctx.stroke();
+  } else if (G.head === 'black' || G.head === 'pink' || G.head === 'rainbow'){
+    drawWig(WIG_COLORS[G.head]);
   } else if (G.head === 'bangs'){
     ctx.beginPath(); ctx.arc(0, -8, 12.5, Math.PI*1.02, Math.PI*1.98);
     ctx.lineTo(11, -6); ctx.lineTo(6,-10); ctx.lineTo(1,-6); ctx.lineTo(-4,-10);
@@ -1067,7 +1125,25 @@ async function loadBest(){
 async function saveBest(){
   try{ await window.storage.set('office-hop:best', String(G.best)); }catch(_){}
 }
-loadBest();
+
+// Unspent grant funding and the wig collection carry over between runs and sessions,
+// so a good run pays for a wig you can wear later rather than evaporating.
+async function loadWallet(){
+  try{
+    const w = await window.storage.get('office-hop:wallet');
+    if (w) G.wallet = +w.value || 0;
+  }catch(_){}
+  try{
+    const o = await window.storage.get('office-hop:wigs');
+    if (o && o.value) for (const id of JSON.parse(o.value)) G.owned.add(id);
+  }catch(_){}
+  renderHeads(); renderShop();
+}
+async function saveWallet(){
+  try{ await window.storage.set('office-hop:wallet', String(G.wallet)); }catch(_){}
+  try{ await window.storage.set('office-hop:wigs', JSON.stringify([...G.owned])); }catch(_){}
+}
+loadBest(); loadWallet();
 
 function end(reason){
   if (!G.running) return;
@@ -1076,6 +1152,8 @@ function end(reason){
   document.getElementById('paused').classList.add('hide');
   document.getElementById('pause').textContent = '⏸ PAUSE';
   if (G.alt > G.best){ G.best = G.alt; saveBest(); }
+  if (G.coins > 0){ G.wallet += G.coins; saveWallet(); }
+  renderShop(); renderHeads();
   document.getElementById('overtitle').textContent = reason;
   document.getElementById('overline').textContent = OVERLINES[(Math.random()*OVERLINES.length)|0];
   document.getElementById('s1').textContent = G.alt;
@@ -1087,13 +1165,70 @@ function end(reason){
   beep(220,.4,'sine',.1);
 }
 
-document.querySelectorAll('[data-head]').forEach(b => {
-  b.onclick = () => {
-    document.querySelectorAll('[data-head]').forEach(x => x.classList.remove('sel'));
-    b.classList.add('sel');
-    G.head = b.dataset.head;
-  };
-});
+/* ---- heads: three you start with, three bought with grant funding ---- */
+const HEADS = [
+  { id:'buckethat', label:'Bucket hat',       price:0  },
+  { id:'bangs',     label:'Bangs',            price:0  },
+  { id:'bare',      label:'Bare &amp; glorious', price:0  },
+  { id:'black',     label:'Black wig',        price:20 },
+  { id:'pink',      label:'Pink wig',         price:30 },
+  { id:'rainbow',   label:'Rainbow wig',      price:50 }
+];
+
+function renderHeads(){
+  const el = document.getElementById('heads');
+  el.innerHTML = '';
+  for (const h of HEADS){
+    const owned = h.price === 0 || G.owned.has(h.id);
+    const b = document.createElement('button');
+    b.className = (G.head === h.id ? 'sel ' : '') + (owned ? '' : 'locked');
+    b.innerHTML = h.label + (owned ? '' : '<span class="pr">$' + h.price + '</span>');
+    if (owned){
+      b.onclick = () => { G.head = h.id; renderHeads(); };
+    } else {
+      b.disabled = true;
+      b.title = 'Buy this in the wig shop after a run';
+    }
+    el.appendChild(b);
+  }
+  document.getElementById('walletline').textContent = G.wallet > 0 ? '$' + G.wallet + ' banked' : '';
+}
+
+function renderShop(){
+  const el = document.getElementById('shop');
+  el.innerHTML = '';
+  document.getElementById('shopwallet').textContent = '$' + G.wallet + ' available';
+  for (const h of HEADS){
+    if (h.price === 0) continue;
+    const owned = G.owned.has(h.id);
+    const row = document.createElement('div');
+    row.className = 'shoprow' + (owned ? ' owned' : '');
+    const nm = document.createElement('div');
+    nm.className = 'nm';
+    nm.innerHTML = h.label;
+    const btn = document.createElement('button');
+    if (owned){
+      btn.textContent = 'OWNED';
+      btn.disabled = true;
+    } else {
+      btn.textContent = '$' + h.price;
+      btn.disabled = G.wallet < h.price;
+      btn.onclick = () => buyHead(h);
+    }
+    row.appendChild(nm); row.appendChild(btn);
+    el.appendChild(row);
+  }
+}
+
+function buyHead(h){
+  if (G.owned.has(h.id) || G.wallet < h.price) return;
+  G.wallet -= h.price;
+  G.owned.add(h.id);
+  G.head = h.id;                      // wear it straight away
+  saveWallet();
+  beep(523,.12,'triangle',.12); beep(784,.16,'triangle',.1); beep(1046,.2,'triangle',.08);
+  renderShop(); renderHeads();
+}
 
 async function start(){
   const r = await enableTilt();
@@ -1114,6 +1249,7 @@ document.getElementById('again').onclick = start;
 
 reset();
 G.running = false;
+renderHeads(); renderShop();
 })();
 </script>
 </body>
