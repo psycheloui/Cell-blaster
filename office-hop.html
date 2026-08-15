@@ -126,6 +126,7 @@
     border-style:dashed;opacity:.45;cursor:not-allowed;
   }
   .heads button .pr{display:block;font-size:10px;opacity:.75;margin-top:2px;}
+  .lbl.stipend{letter-spacing:.04em;font-size:10px;}
   #walletline{float:right;text-transform:none;letter-spacing:0;color:#C98A12;font-weight:700;}
   .shoprow{
     display:flex;align-items:center;gap:8px;margin-bottom:7px;
@@ -154,7 +155,7 @@
   <div>
     <div class="lbl">Altitude</div>
     <div class="alt" id="altv">0<span> m</span></div>
-    <div class="lbl" style="margin-top:9px">Grant funding</div>
+    <div class="lbl stipend" style="margin-top:9px">Administrative stipend</div>
     <div class="alt coin" id="coinv">$0</div>
   </div>
   <div style="text-align:right">
@@ -187,7 +188,7 @@
     <div class="legend">
       <b>◉</b> cancer cell — stomp it from above, shoot it, or lose a neutrophil<br>
       👆 tap anywhere — fire toward that spot, pops one cell<br>
-      <b>$</b> grant funding — grab every coin you can; spend it on wigs after a run<br>
+      <b>$</b> administrative stipend — grab every coin; spend it on wigs after a run<br>
       pink-edged rungs are the political ones. they wobble.<br>
       ☕ espresso — one enormous launch<br>
       🧤 cold gloves — 8 seconds of nothing touching you<br>
@@ -208,7 +209,7 @@
     <div class="sub">The to-do list will wait. It's very good at that.</div>
     <div class="stats">
       <div class="stat"><div class="n" id="p1">0</div><div class="l">Meters climbed</div></div>
-      <div class="stat"><div class="n" id="p2">0</div><div class="l">Grant funding</div></div>
+      <div class="stat"><div class="n" id="p2">0</div><div class="l">Admin stipend</div></div>
     </div>
     <div class="rule"></div>
     <button class="big" id="resume">Resume</button>
@@ -223,12 +224,14 @@
       <div class="stat"><div class="n" id="s1">0</div><div class="l">Meters climbed</div></div>
       <div class="stat"><div class="n" id="s2">0</div><div class="l">Chores stamped</div></div>
       <div class="stat"><div class="n" id="s3">0</div><div class="l">Cells stomped</div></div>
-      <div class="stat"><div class="n" id="s5">0</div><div class="l">Grant funding</div></div>
+      <div class="stat"><div class="n" id="s5">0</div><div class="l">Admin stipend</div></div>
       <div class="stat"><div class="n" id="s4">0</div><div class="l">Personal best</div></div>
     </div>
     <div class="rule"></div>
     <div class="keys">Wig shop <span id="shopwallet"></span></div>
     <div id="shop"></div>
+    <div class="keys" style="margin-top:12px">Pick your head</div>
+    <div class="heads" id="heads2"></div>
     <button class="big" id="again">Go again</button>
   </div>
 </div>
@@ -557,7 +560,7 @@ function addPlatform(y){
     const kinds = ['coffee','glove','iv'];
     G.ups.push({ x: rnd(24, W-24), y: y - 34, k: kinds[(Math.random()*3)|0], bob: Math.random()*6.3 });
   }
-  // grant funding — sits on the jump path above the rung, so it rewards a well-aimed hop
+  // administrative stipend — sits on the jump path above the rung, so it rewards a well-aimed hop
   if (Math.random() < 0.16){
     G.coinsOn.push({ x: cx + rnd(-34, 34), y: y - rnd(26, 46), bob: Math.random()*6.3, spin: Math.random()*6.3 });
   }
@@ -723,7 +726,7 @@ function update(dt){
     }
   }
 
-  // grant funding
+  // administrative stipend
   for (const co of G.coinsOn){
     co.bob += 0.07 * ds; co.spin += 0.09 * ds;
     if (co.got) continue;
@@ -1126,7 +1129,7 @@ async function saveBest(){
   try{ await window.storage.set('office-hop:best', String(G.best)); }catch(_){}
 }
 
-// Unspent grant funding and the wig collection carry over between runs and sessions,
+// Unspent stipend and the wig collection carry over between runs and sessions,
 // so a good run pays for a wig you can wear later rather than evaporating.
 async function loadWallet(){
   try{
@@ -1143,7 +1146,7 @@ async function saveWallet(){
   try{ await window.storage.set('office-hop:wallet', String(G.wallet)); }catch(_){}
   try{ await window.storage.set('office-hop:wigs', JSON.stringify([...G.owned])); }catch(_){}
 }
-loadBest(); loadWallet();
+loadBest();
 
 function end(reason){
   if (!G.running) return;
@@ -1165,7 +1168,7 @@ function end(reason){
   beep(220,.4,'sine',.1);
 }
 
-/* ---- heads: three you start with, three bought with grant funding ---- */
+/* ---- heads: three you start with, three bought with the stipend ---- */
 const HEADS = [
   { id:'buckethat', label:'Bucket hat',       price:0  },
   { id:'bangs',     label:'Bangs',            price:0  },
@@ -1176,22 +1179,28 @@ const HEADS = [
 ];
 
 function renderHeads(){
-  const el = document.getElementById('heads');
-  el.innerHTML = '';
-  for (const h of HEADS){
-    const owned = h.price === 0 || G.owned.has(h.id);
-    const b = document.createElement('button');
-    b.className = (G.head === h.id ? 'sel ' : '') + (owned ? '' : 'locked');
-    b.innerHTML = h.label + (owned ? '' : '<span class="pr">$' + h.price + '</span>');
-    if (owned){
-      b.onclick = () => { G.head = h.id; renderHeads(); };
-    } else {
-      b.disabled = true;
-      b.title = 'Buy this in the wig shop after a run';
+  // the same picker appears on the start screen and on the game-over screen, so a player
+  // can switch wigs right before going again without backing out to the title
+  for (const containerId of ['heads', 'heads2']){
+    const el = document.getElementById(containerId);
+    if (!el) continue;
+    el.innerHTML = '';
+    for (const h of HEADS){
+      const owned = h.price === 0 || G.owned.has(h.id);
+      const b = document.createElement('button');
+      b.className = (G.head === h.id ? 'sel ' : '') + (owned ? '' : 'locked');
+      b.innerHTML = h.label + (owned ? '' : '<span class="pr">$' + h.price + '</span>');
+      if (owned){
+        b.onclick = () => { G.head = h.id; renderHeads(); };
+      } else {
+        b.disabled = true;
+        b.title = 'Buy this in the wig shop';
+      }
+      el.appendChild(b);
     }
-    el.appendChild(b);
   }
-  document.getElementById('walletline').textContent = G.wallet > 0 ? '$' + G.wallet + ' banked' : '';
+  const wl = document.getElementById('walletline');
+  if (wl) wl.textContent = G.wallet > 0 ? '$' + G.wallet + ' banked' : '';
 }
 
 function renderShop(){
@@ -1250,6 +1259,7 @@ document.getElementById('again').onclick = start;
 reset();
 G.running = false;
 renderHeads(); renderShop();
+loadWallet();     // after HEADS exists, since it repaints the pickers
 })();
 </script>
 </body>
